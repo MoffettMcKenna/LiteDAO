@@ -1,6 +1,9 @@
 import sqlite3 
 
-class Table
+class Table:
+    '''
+    Defines the
+    '''
 
     __SELECT = "Select {Columns} From {Table}\n"  # 1:column(s) 2:table(s)
     __WHERE  = "Where {Column} {Operator} {Value}"
@@ -35,14 +38,14 @@ class Table
         for col in cols:
             # save the name of the column by the index of the key 
             self._columns[col[0]] = col[1]
-            if(col[6] = 1):
+            if(col[6] == 1):
                 # if this is a primary key save it in that list
                 self._pks.Append(col[0])
         #end for col
 
     #end init()
 
-    def Join(self, other, otherCol, myCol)
+    def Join(self, other, otherCol, myCol):
         '''
         Creates a psuedo-table by performing a left join on the table other.
         Params:
@@ -52,11 +55,11 @@ class Table
 
         This will only join on equals between two columns.
         '''
-       return
+       pass
     #end Join()
 
 
-    def Get(self, columns, where = None)
+    def Get(self, columns, where = None):
         '''
         Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are returned.
         
@@ -64,7 +67,7 @@ class Table
             columns: A list of the columns to select.
             where: A list of tuples, each tuple being a set of column name, comparison operator, and value.
         Return:
-            
+            ???
         '''
 
         # turn the columns into a comma seperated list
@@ -82,11 +85,11 @@ class Table
                 # TODO scrub the items in the tuple - also sanity check the operator
                 if wpresent:
                     # "Where {Column} {Operator} {Value}"
-                    query += __WHERE.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])  
+                    query += self.__WHERE.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
                     wpresent = True
                 else:
                     # " and {Column} {Operator} {Value}\n"
-                    query += __WHEREA.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])  
+                    query += self.__WHEREA.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
             # end for where
         # end if where
 
@@ -97,7 +100,8 @@ class Table
         return
     #end Get()
 
-    def Add()
+    def Add():
+        pass
     #end Add()
 
 if __name__ == "__main__":
