@@ -2,21 +2,21 @@ import sqlite3
 
 class Table:
     '''
-    Defines the
+    Defines a single table from the database.  Provides operations to read and write, but not create.
     '''
 
-    __SELECT = "Select {Columns} From {Table}\n"  # 1:column(s) 2:table(s)
-    __WHERE  = "Where {Column} {Operator} {Value}"
-    __WHEREA = " and {Column} {Operator} {Value}\n"
-    __LEFTJN = "Left Join {Table2} on {TableCol} = {Table2Col}\n"
-    __ORDER  = "Order By {Column}\n"
+    # these are the basic types in sqlite
+    __TYPES = {
+            'integer': type(0), 
+            'real'   : type(0.0), 
+            'text'   : type('string'), 
+            'null'   : type(None), 
+            'blob'   : type(len) #type blob as a method to be distinct
+    }
 
     def __init__(self, name, dbfile):
         self.DB = dbfile
         self.TableName = name
-
-        # initialize the select statement
-        self.__select = "Select {Columns} From " + self.TableName
 
         # grab the data
         c = sqlite3.connect(self.DB)
@@ -25,10 +25,9 @@ class Table:
         # 0 = index of the column (order)
         # 1 = column name
         # 2 = data type
-        # 3 = default value
-        # 4 = flag for nullable (0 = no, 1 = yes)
-        # 5 = default value
-        # 6 = primary key flag (0 = no, 1 = yes)
+        # 3 = flag for nullable (0 = no, 1 = yes)
+        # 4 = default value
+        # 5 = primary key flag (0 = no, 1 = yes)
 
         # init the columns dictionary and primary keys list
         self._columns = {}
@@ -37,61 +36,66 @@ class Table:
         # move the data into the dictionary
         for col in cols:
             # save the name of the column by the index of the key 
-            self._columns[col[0]] = col[1]
-            if(col[6] == 1):
+            self._columns[col[1]] = Column(__TYPES[col[2], col[1])
+            if(col[5] == 1):
                 # if this is a primary key save it in that list
-                self._pks.Append(col[0])
+                self._pks.Append(col[1])
         #end for col
+
+        # init the empty where clause list
+        self.__wheres = []
 
     #end init()
 
     def Join(self, other, otherCol, myCol):
         '''
         Creates a psuedo-table by performing a left join on the table other.
-        Params:
-            other - the other table
-            otherCol - the column from the other table which needs to match one of mine for the join.
-            myCol - the column from this table to match for the join
-
         This will only join on equals between two columns.
+        
+        Args:
+            other: The other table
+            otherCol: The column from the other table which needs to match one of mine for the join.
+            myCol: The column from this table to match for the join
         '''
        pass
     #end Join()
 
-
-    def Get(self, columns, where = None):
+    def Filter(self, column, comparison, value):
         '''
-        Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are returned.
+        Adds a filter to the table so only rows meeting the filter conditions will be returned from a future get.
+
+        Args:
+            column: The name of the column to filter on.
+            comparison: How to compare the value with the data in the column.
+            value: The threshold which limits the rows with qualifying data.
+        '''
+
+        # make sure the column exists before using it
+        if column not in self._columns:
+            raise ValueError(f'{column} is not a column of this table.')
+
+        # check that the value is valid for the column
+        if not self._columns[column].Validate(value):
+            raise ValueError(f'The value {value} is not valid for column {column}')
+
+        # save the filter for later use
+        where.append(f'{column} {comparison} {value}')
+
+    #end Filter()
+
+    def Get(self, columns):
+        '''
+        Retrieves all values of a set of columns.  
         
         Args:
             columns: A list of the columns to select.
-            where: A list of tuples, each tuple being a set of column name, comparison operator, and value.
         Return:
-            ???
+            A list of tuples, with each tuple being one set of columns for a row.
         '''
 
-        # turn the columns into a comma seperated list
-        cols = ', '.join(columns)
-        # TODO scrub the columns before the join
+        
 
-        # start the query
-        query = self.__select.format_map({'Columns':cols})
-
-        wpresent = False
-
-        #handle adding the where clause, if there is one
-        if where != None:
-            for w in where:
-                # TODO scrub the items in the tuple - also sanity check the operator
-                if wpresent:
-                    # "Where {Column} {Operator} {Value}"
-                    query += self.__WHERE.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
-                    wpresent = True
-                else:
-                    # " and {Column} {Operator} {Value}\n"
-                    query += self.__WHEREA.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
-            # end for where
-        # end if where
+        query = ''
 
         # run the query
         c = sqlite3.connect(self.DB)
@@ -104,12 +108,40 @@ class Table:
         pass
     #end Add()
 
+    def UpdateValidators(self, colName : str, checker):
+        '''
+        Changes the validator for the given column.
+
+        Args:
+            colName: The name of the column to update.
+            checker: The new validator function.
+        '''
+        self._columns[colName].Set_Validator(checker)
+    #end UpdateValidators()
+
+class _Column:
+
+    __VALIDATORS = {
+            type(0)        : ( lambda val : type(val) == type(0)        ),
+            type(0.0)      : ( lambda val : type(val) == type(0.0)      ),
+            type('string') : ( lambda val : type(val) == type('string') ),
+            type(None)     : ( lambda val : type(val) == type(None)     ),
+            type(len)      : ( lambda val : type(val) == type(len)      )
+        }
+
+
+    def __init__(ctype : type, name : str, properties : int = 0, checker = None):
+        self.__type = ctype
+        self.__validator = checker if checker is not None else __VALIDATORS[ctype]
+        self.Name = name
+    # end Constructor
+
+    def Validate(self, value):
+        return self.__validator(value)
+
+    def Set_Validator(self, vdator):
+        this.__validator = vdator
+
 if __name__ == "__main__":
-    
-    # simple get
+   
 
-    # one record get
-
-    # get with where
-
-    # get with compound where clause
