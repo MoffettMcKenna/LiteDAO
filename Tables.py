@@ -1,15 +1,23 @@
-import sqlite3 
+import sqlite3
+from Errors import *
 
 class Table:
-    '''
-    Defines the
-    '''
+    """
+
+    """
 
     __SELECT = "Select {Columns} From {Table}\n"  # 1:column(s) 2:table(s)
-    __WHERE  = "Where {Column} {Operator} {Value}"
+    __WHERE = "Where {Column} {Operator} {Value}"
     __WHEREA = " and {Column} {Operator} {Value}\n"
     __LEFTJN = "Left Join {Table2} on {TableCol} = {Table2Col}\n"
-    __ORDER  = "Order By {Column}\n"
+    __ORDER = "Order By {Column}\n"
+
+    # Expected label names from the pragma read
+    __LBLNAME = 'name'      # name of the column
+    __LBLTYPE = 'type'      # data type of the column
+    __LBLDFT = 'dflt_value' # default value of the column
+    __LBLPK = 'pk'          # primary key flag
+    __LBLNN = 'notnull'     # notnull/nullable flag
 
     def __init__(self, name, dbfile):
         self.DB = dbfile
@@ -20,96 +28,70 @@ class Table:
 
         # grab the data
         c = sqlite3.connect(self.DB)
-        cols = c.execute("pragma table_info({0})".format(self.TableName)).fetchall()
-        # list of the table_info structs
-        # 0 = index of the column (order)
-        # 1 = column name
-        # 2 = data type
-        # 3 = default value
-        # 4 = flag for nullable (0 = no, 1 = yes)
-        # 5 = default value
-        # 6 = primary key flag (0 = no, 1 = yes)
+        cq = c.execute("pragma table_info({0})".format(self.TableName))
 
         # init the columns dictionary and primary keys list
-        self._columns = {}
-        self._pks = []
+        self._columns = {}  # this will hold the full tuple for each column keyed by column name
+        self._pks = []      # a list of the names of primary keys
+
+        # clabels are the pragma field names for the column meta data
+        self._clabels = [x[0] for x in cq.description]
 
         # move the data into the dictionary
-        for col in cols:
-            # save the name of the column by the index of the key 
-            self._columns[col[0]] = col[1]
-            if(col[6] == 1):
-                # if this is a primary key save it in that list
-                self._pks.Append(col[0])
-        #end for col
+        for col in cq.fetchall():
+            name = col[self._clabels.index(self.__LBLNAME)]
 
-    #end init()
+            # save the name of the column by the index of the key 
+            self._columns[name] = col
+
+            # test for pk status
+            if(col[self._clabels.index(self.__LBLPK)]):
+                # if this is a primary key save it in that list
+                self._pks.Append(name)
+        # end for col
+    # end init()
 
     def Join(self, other, otherCol, myCol):
-        '''
-        Creates a psuedo-table by performing a left join on the table other.
-        Params:
-            other - the other table
-            otherCol - the column from the other table which needs to match one of mine for the join.
-            myCol - the column from this table to match for the join
+        """
+        Creates a psuedo-table by performing a left join on the table other.  This will only join on equals between two
+        columns.
 
-        This will only join on equals between two columns.
-        '''
-       pass
-    #end Join()
-
+        :param other: the other table
+        :param otherCol: the column from the other table which needs to match one of mine for the join.
+        :param myCol: the column from this table to match for the join
+        :return:
+        """
+        pass
+    # end Join()
 
     def Get(self, columns, where = None):
-        '''
-        Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are returned.
-        
-        Args:
-            columns: A list of the columns to select.
-            where: A list of tuples, each tuple being a set of column name, comparison operator, and value.
-        Return:
-            ???
-        '''
+        """
+        Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
+        returned.
 
-        # turn the columns into a comma seperated list
-        cols = ', '.join(columns)
-        # TODO scrub the columns before the join
+        :param columns: A list of the column names to select.
+        :param where: A list of tuples, each tuple being a set of column name, comparison operator, and value.
+        :return:
+        """
 
-        # start the query
-        query = self.__select.format_map({'Columns':cols})
+        # sanity check the columns
+        for c in columns:
+            if c not in self._columns:
+                raise ImaginaryColumnException(self.TableName, c)
+        # end for c
 
-        wpresent = False
 
-        #handle adding the where clause, if there is one
-        if where != None:
-            for w in where:
-                # TODO scrub the items in the tuple - also sanity check the operator
-                if wpresent:
-                    # "Where {Column} {Operator} {Value}"
-                    query += self.__WHERE.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
-                    wpresent = True
-                else:
-                    # " and {Column} {Operator} {Value}\n"
-                    query += self.__WHEREA.format_map('Column':w[0], 'Operator':w[1], 'Value':w[2])
-            # end for where
-        # end if where
-
-        # run the query
-        c = sqlite3.connect(self.DB)
-        cols = c.execute(query).fetchall()
-
-        return
     #end Get()
 
-    def Add():
+    def __throw(err, *args):
+        print(args)
+        raise err(*args)
+
+    def Add(self, values):
+        """
+
+        :param values:
+        :return:
+        """
         pass
     #end Add()
-
-if __name__ == "__main__":
-    
-    # simple get
-
-    # one record get
-
-    # get with where
-
-    # get with compound where clause
