@@ -1,19 +1,15 @@
 import sqlite3
 from Errors import *
+from dataclasses import dataclass, InitVar, field
+import typing
+
 
 class Table:
     """
     Defines a single table from the database.  Provides operations to read and write, but not create.
     """
 
-    # these are the basic types in sqlite
-    __TYPES = {
-            'integer': type(0),
-            'real'   : type(0.0),
-            'text'   : type('string'),
-            'null'   : type(None),
-            'blob'   : type(len) #type blob as a method to be distinct
-    }
+    # Queries to use
     __SELECT = "Select {Columns} From {Table}\n"  # 1:column(s) 2:table(s)
     __WHERE = "Where {Column} {Operator} {Value}"
     __WHEREA = " and {Column} {Operator} {Value}\n"
@@ -21,13 +17,13 @@ class Table:
     __ORDER = "Order By {Column}\n"
 
     # Expected label names from the pragma read
-    __LBLNAME = 'name'      # name of the column
-    __LBLTYPE = 'type'      # data type of the column
-    __LBLDFT = 'dflt_value' # default value of the column
-    __LBLPK = 'pk'          # primary key flag
-    __LBLNN = 'notnull'     # notnull/nullable flag
+    __LBLNAME = 'name'  # name of the column
+    __LBLTYPE = 'type'  # data type of the column
+    __LBLDFT = 'dflt_value'  # default value of the column
+    __LBLPK = 'pk'  # primary key flag
+    __LBLNN = 'notnull'  # notnull/nullable flag
 
-    def __init__(self, name, dbfile):
+    def __init__(self, name: str, dbfile: str):
         self.DB = dbfile
         self.TableName = name
 
@@ -39,8 +35,8 @@ class Table:
         cq = c.execute("pragma table_info({0})".format(self.TableName))
 
         # init the columns dictionary and primary keys list
-        self._columns = {}  # this will hold the full tuple for each column keyed by column name
-        self._pks = []      # a list of the names of primary keys
+        self._columns = {}  # this will hold _Column objects indexed by name
+        self._pks = []  # a list of the names of primary keys
         self._valdtrs = {}  # the validators for the columns
 
         # clabels are the pragma field names for the column meta data
@@ -51,29 +47,29 @@ class Table:
             name = col[self._clabels.index(self.__LBLNAME)]
 
             # save the name of the column by the index of the key 
-            self._columns[name] = col
+            self._columns[name] = Column(pragma=col, headers=cq)
 
             # test for pk status
-            if col[self._clabels.index(self.__LBLPK)]:
+            if self._columns[name].PrimaryKey:
                 # if this is a primary key save it in that list
                 self._pks.Append(name)
         # end for col
-    # end init()
+    # end __init__()
 
-    def Join(self, other, otherCol, myCol):
+    def Join(self, other, otherCol: str, myCol: str):
         """
         Creates a psuedo-table by performing a left join on the table other.
-        Params:
-            other - the other table
-            otherCol - the column from the other table which needs to match one of mine for the join.
-            myCol - the column from this table to match for the join
-
         This will only join on equals between two columns.
+
+        :param other: The table to join with.
+        :param otherCol: The name of the column from the other table to join with.
+        :param myCol: The the name of the column from within this table to match to otherCol.
+        :return:
         """
         pass
-    #end Join()
+    # end Join()
 
-    def Get(self, columns, where = None):
+    def Get(self, columns: list, where: list = None):
         """
         Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
         returned.
@@ -88,21 +84,17 @@ class Table:
             if c not in self._columns:
                 raise ImaginaryColumnException(self.TableName, c)
         # end for c
+    # end Get()
 
-
-    #end Get()
-
-    def Filter(self, column, comparison, value):
+    def Filter(self, name: str, operator: str, value: typing.Any):
         """
-        Adds a filter to the table so only rows meeting the filter conditions will be returned from a future get.
 
-        Args:
-            column: The name of the column to filter on.
-            comparison: How to compare the value with the data in the column.
-            value: The threshold which limits the rows with qualifying data.
+        :param name:
+        :param operator:
+        :param value:
+        :return:
         """
     # end Filter()
-
 
     def __throw(err, *args):
         print(args)
@@ -115,38 +107,77 @@ class Table:
         :return:
         """
         pass
-    #end Add()
+    # end Add()
 
-    def UpdateValidators(self, colName : str, checker):
+    def UpdateValidators(self, name: str, checker: type(len)):
         """
-        Changes the validator for the given column.
-
-        Args:
-            colName: The name of the column to update.
-            checker: The new validator function.
+        Changes the validator for a given column.
+        :param name: The name of the column to change the validation method for.
+        :param checker: The new validation function.
         """
-    #end UpdateValidators()
+        self._columns[name].Set_Validator(checker)
+    # end UpdateValidators()
 
-class _Column:
 
-    __VALIDATORS = {
-            type(0)        : ( lambda val : type(val) == type(0)        ),
-            type(0.0)      : ( lambda val : type(val) == type(0.0)      ),
-            type('string') : ( lambda val : type(val) == type('string') ),
-            type(None)     : ( lambda val : type(val) == type(None)     ),
-            type(len)      : ( lambda val : type(val) == type(len)      )
+@dataclass()
+class Column:
+    """
+    Representation of a column in the table.  Allows for consolidation of the validation functions and meta-data.
+    The validation is performed through a single function which takes only the prospective value as an argument, and
+    returns True if the value is good.  This defaults to a simple type check.
+    """
+    pragma: tuple
+    headers: tuple
+    _validator: type(len) = field(init=False)
+    Name: str = field(init=False)
+    ColumnType: str = field(init=False)
+    Default: typing.Any = field(init=False)
+    PrimaryKey: bool = field(init=False)
+    NotNull: bool = field(init=False)
+
+    # Expected label names from the pragma read
+    __LBLNAME = 'name'  # name of the column
+    __LBLTYPE = 'type'  # data type of the column
+    __LBLDFT = 'dflt_value'  # default value of the column
+    __LBLPK = 'pk'  # primary key flag
+    __LBLNN = 'notnull'  # notnull/nullable flag
+
+    def __post_init__(self):
+        self.Name = self.pragma[self.headers.index(self.__LBLNAME)]
+        self.ColumnType = self.pragma[self.headers.index(self.__LBLTYPE)]
+        self.Default = self.pragma[self.headers.index(self.__LBLDFT)]
+        self.PrimaryKey = self.pragma[self.headers.index(self.__LBLPK)]
+        self.NotNull = self.pragma[self.headers.index(self.__LBLNN)]
+
+        # default validators - basic sqlite data types
+        __VALIDATORS = {
+            'integer': (lambda val: isinstance(val, int)),
+            'real': (lambda val: isinstance(val, float)),
+            'text': (lambda val: isinstance(val, str)),
+            'null': (lambda val: val is None),
+            'blob': (lambda val: type(val) == type(len))  # this won't work - how to validate blobs?
         }
+        self._validator = self.__VALIDATORS[self.ColumnType]
 
+    def Validate(self, value: typing.Any) -> bool:
+        """
+        Checks if the value passed in is appropriate for this column.
+        :param value: The candidate to validate.
+        :return: True if the value can be used for this column, False otherwise.
+        """
+        return self._validator(value)
 
-    def __init__(self, ctype : type, name : str, properties : int = 0, checker = None):
-        self.__type = ctype
-        self.__validator = checker if checker is not None else self.__VALIDATORS[ctype]
-        self.Name = name
-    # end Constructor
+    def Set_Validator(self, vdator: type(len)):
+        """
+        Changes the validation function for a column.
+        :param vdator: The new validator function.
+        """
+        self._validator = vdator
 
-    def Validate(self, value):
-        return self.__validator(value)
-
-    def Set_Validator(self, vdator):
-        self.__validator = vdator
-
+    def ReadAttribute(self, attr: str) -> typing.Any:
+        """
+        Future proofing in case something shows up later we need easy access to.
+        :param attr: The meta-data attribute to get.
+        :return: The value of the attribute.
+        """
+        return self.pragma[self.headers.index(attr)]
