@@ -1,5 +1,5 @@
 import sqlite3
-from src.Errors import *
+from Errors import *
 from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
@@ -41,9 +41,9 @@ class Column:
             'real': (lambda val: isinstance(val, float)),
             'text': (lambda val: isinstance(val, str)),
             'null': (lambda val: val is None),
-            'blob': (lambda val: type(val) == type(len))  # this won't work - how to validate blobs?
+            'blob': (lambda val: val is not None ) # just make sure blobs aren't null
         }
-        self._validator = self.__VALIDATORS[self.ColumnType]
+        self._validator = __VALIDATORS[self.ColumnType]
 
     def Validate(self, value: typing.Any) -> bool:
         """
