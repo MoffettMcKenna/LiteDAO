@@ -1,3 +1,9 @@
+# pycharm ide files
+.idea/
+
+# ignore test database files
+test/test.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -126,13 +126,14 @@ class Table:
             name = col[self._clabels.index(self.__LBLNAME)]
 
             # save the name of the column by the index of the key 
-            self._columns[name] = Column(pragma=col, headers=cq)
+            self._columns[name] = Column(pragma=col, headers=self._clabels)
 
             # test for pk status
             if self._columns[name].PrimaryKey:
                 # if this is a primary key save it in that list
-                self._pks.Append(name)
+                self._pks.append(name)
         # end for col
+
     # end __init__()
 
     def Join(self, other, otherCol: str, myCol: str):
@@ -176,6 +177,7 @@ class Table:
         # add the where clause(s)
 
         # execute the query
+        print(query)
         cur = self.__client.execute(query)
 
         # marshall the results and return the rows
