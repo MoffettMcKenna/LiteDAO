@@ -5,6 +5,7 @@ import sys
 sys.path.insert(1, "../src/")
 from Tables import Table
 
+
 @pytest.fixture
 def buildDBFile():
     if not os.path.exists('./test.db'):
@@ -44,5 +45,28 @@ def test_GetAll(buildDBFile):
     assert data[3][1] == "Abigail"
     assert data[3][2] == "tickbaby"
 
+
+def test_GetOne(buildDBFile):
+    t = Table("Person", buildDBFile)
+    data = t.Get(["name"])
+
+    assert data[0][0] == "moffett"
+    assert data[1][0] == "Ashley"
+    assert data[2][0] == "Patrick"
+    assert data[3][0] == "Abigail"
+
+
+def test_GetTwo(buildDBFile):
+    t = Table("Person", buildDBFile)
+    data = t.Get(["name", "id"])
+
+    assert data[0][0] == "moffett"
+    assert data[0][1] == 1
+    assert data[1][0] == "Ashley"
+    assert data[1][1] == 2
+    assert data[2][0] == "Patrick"
+    assert data[2][1] == 3
+    assert data[3][0] == "Abigail"
+    assert data[3][1] == 4
 
 

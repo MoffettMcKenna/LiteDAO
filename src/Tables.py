@@ -1,5 +1,5 @@
 import sqlite3
-from Errors import *
+from src.Errors import *
 from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
@@ -133,7 +133,6 @@ class Table:
                 # if this is a primary key save it in that list
                 self._pks.append(name)
         # end for col
-
     # end __init__()
 
     def Join(self, other, otherCol: str, myCol: str):
@@ -175,6 +174,8 @@ class Table:
         query = self.__select.format_map({'Columns': str.join(', ', columns)})
 
         # add the where clause(s)
+        if len(self._filters) > 0:
+
 
         # execute the query
         print(query)
