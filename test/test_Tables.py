@@ -4,6 +4,7 @@ import os
 import sys
 sys.path.insert(1, "../src/")
 from Tables import Table
+from Tables import ComparisonOps
 
 
 @pytest.fixture
@@ -69,4 +70,11 @@ def test_GetTwo(buildDBFile):
     assert data[3][0] == "Abigail"
     assert data[3][1] == 4
 
+def test_Get_Null_Nickname(buildDBFile):
+    t = Table("Person", buildDBFile)
+    t.Filter("nickname", ComparisonOps.IS, None)
+    data = t.GetAll()
 
+    assert len(data) == 1
+    assert data[0][1] == "Patrick"
+    assert data[0][2] == None

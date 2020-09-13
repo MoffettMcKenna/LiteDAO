@@ -1,5 +1,5 @@
 import sqlite3
-from src.Errors import *
+from Errors import *
 from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
@@ -37,11 +37,11 @@ class Column:
 
         # default validators - basic sqlite data types
         __VALIDATORS = {
-            'integer': (lambda val: isinstance(val, int)),
-            'real': (lambda val: isinstance(val, float)),
-            'text': (lambda val: isinstance(val, str)),
+            'integer': (lambda val: isinstance(val, int) or val == None),
+            'real': (lambda val: isinstance(val, float) or val == None),
+            'text': (lambda val: isinstance(val, str) or val == None),
             'null': (lambda val: val is None),
-            'blob': (lambda val: val is not None ) # just make sure blobs aren't null
+            'blob': (lambda val: True ) # just let it ride
         }
         self._validator = __VALIDATORS[self.ColumnType]
 
@@ -81,6 +81,21 @@ class ComparisonOps(IntEnum):
     LSorEQ = 6
     LIKE = 7
     IN = 8
+    IS = 9
+
+    def AsStr(self):
+        strs = {
+            ComparisonOps.EQUALS: '=',
+            ComparisonOps.NOTEQ: '<>',
+            ComparisonOps.GREATER: '>',
+            ComparisonOps.GRorEQ: '>=',
+            ComparisonOps.LESSER: '<',
+            ComparisonOps.LSorEQ: '<=',
+            ComparisonOps.LIKE: 'like',
+            ComparisonOps.IN: 'in',
+            ComparisonOps.IS: 'is'
+        }
+        return strs[self.value]
 
 
 @dataclass()
@@ -175,7 +190,16 @@ class Table:
 
         # add the where clause(s)
         if len(self._filters) > 0:
+            # add the intial where
+            query += f' Where {self._filters[0].column} {self._filters[0].operator.AsStr()} {self._filters[0].value}'
 
+            # add additional clauses if needed
+            if len(self._filters) > 1:
+                for f in self._filters:
+                    query += f' and {f.column} {f.operator.AsStr()} {f.value}'
+                # end for filters
+            # end if len > 1
+        # end if len > 0
 
         # execute the query
         print(query)
@@ -203,8 +227,13 @@ class Table:
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
+        if value is None:
+            val = 'null'
+        else:
+            val = value
+
         # build the data instance
-        clause = Where(column=name, operator=operator, value=value)
+        clause = Where(column=name, operator=operator, value=val)
 
         # add the filter
         self._filters.append(clause)
