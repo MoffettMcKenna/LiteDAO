@@ -78,3 +78,9 @@ def test_Get_Null_Nickname(buildDBFile):
     assert len(data) == 1
     assert data[0][1] == "Patrick"
     assert data[0][2] == None
+
+def test_Get_Nickname(buildDBFile):
+    t = Table("Person", buildDBFile)
+    
+    
+
