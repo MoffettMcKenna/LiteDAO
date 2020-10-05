@@ -15,15 +15,22 @@ def buildDBFile():
 
         cur.execute("""Create Table if not exists Person (
                         id integer primary key,
-                        name text not null,
-                        nickname text
+                        fname text not null,
+                        lname text not null,
+                        nickname text,
+                        birthday text
                     );""")
 
-        insert = 'Insert into Person (name, nickname) values (?, ?)'
-        cur.execute(insert, ('moffett', 'daddy'))
-        cur.execute(insert, ('Ashley', 'Mommy'))
-        cur.execute(insert, ('Patrick', None))
-        cur.execute(insert, ('Abigail', 'tickbaby'))
+        # bday format -> YYYY-MM-DD
+
+        insert = 'Insert into Person (fname, lname, nickname) values (?, ?)'
+        cur.execute(insert, ('Joe',    'Smith', 'daddy', '1911-11-11'))
+        cur.execute(insert, ('June',   'Smith', 'Mommy', '2222-02-22'))
+        cur.execute(insert, ('Jack',   'Smith', None,    '2001-10-01'))
+        cur.execute(insert, ('Jill',   'Smith', None,    '2011-04-11'))
+        cur.execute(insert, ('Joanna', 'Dane',  'Mimi',  '2019-12-13'))
+        cur.execute(insert, ('John',   'Doe',   'Pops',  '1909-03-10'))
+        cur.execute(insert, ('Jane',   'Doe',   'Grams', '1024-01-28'))
 
         con.commit()
 
