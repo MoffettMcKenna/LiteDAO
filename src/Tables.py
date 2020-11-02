@@ -1,8 +1,9 @@
 import sqlite3
-from Errors import *
 from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
+
+from src.Errors import *
 
 
 @dataclass()
@@ -163,14 +164,14 @@ class Table:
         pass
     # end Join()
 
-    def GetAll(self):
+    def GetAll(self) -> list:
         """
         Performs a get for all the columns in the table.  Any filters set still apply to the results.
         :return: The results.
         """
         return self.Get(list(self._columns.keys()))
 
-    def Get(self, columns: list):
+    def Get(self, columns: list) -> list:
         """
         Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
         returned.

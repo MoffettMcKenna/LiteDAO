@@ -3,6 +3,7 @@
 
 # ignore test database files
 test/test.db
+test/test.db-journal
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
