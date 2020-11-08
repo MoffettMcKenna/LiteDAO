@@ -5,6 +5,8 @@ from enum import IntEnum
 
 from src.Errors import *
 
+# TODO add date as a special type (subset of text - sqlite doesn't have native date/time support)
+
 
 @dataclass()
 class Column:
@@ -45,6 +47,17 @@ class Column:
             'blob': (lambda val: True ) # just let it ride
         }
         self._validator = __VALIDATORS[self.ColumnType]
+
+        if self.DefaultType is None:
+            defaults = {
+                'integer': 0,
+                'real', 0.0,
+                'text': '',
+                'null': None,
+                'blob': b''
+            }
+            self.Default = defaults[self.ColumnType]
+    
 
     def Validate(self, value: typing.Any) -> bool:
         """
@@ -248,11 +261,24 @@ class Table:
 
     def Add(self, values):
         """
-
-        :param values:
-        :return:
+        Adds a new entry to the table.
+        :param values: A map of the column names and values.  Any missing values will be filled in with the default value (except primary keys).
         """
-        pass
+        cols = self._columns.keys()
+        vals = {}
+
+        # grab the values from the parameter
+        for k in values.keys:
+            cols.remove(k)
+            vals[k] = values[k]
+        
+        # fill in any missing values with the defaults 
+        for c in cols:
+            # let sqlite handle filling in the primary keys
+            if c not in self._pks:
+                vals[c] = self._columns[c].Default
+
+        insert = f"Insert into {self._name}({str.join(',', list(vals.keys()))}) values 
     # end Add()
 
     def UpdateValidators(self, name: str, checker: type(len)):
@@ -261,8 +287,24 @@ class Table:
         :param name: The name of the column to change the validation method for.
         :param checker: The new validation function.
         """
+        # verify the column
+        if name not in self._columns.keys():
+            raise ImaginaryColumnException(self.TableName, name)
+
         self._columns[name].Set_Validator(checker)
     # end UpdateValidators()
 
+    def SetDefault(self, name: str, value: typing.any):
+        """
+        Changes the value of the default value for the given column.
+        """
+        # verify the column
+        if name not in self._columns.keys():
+            raise ImaginaryColumnException(self.TableName, name)
 
+        # make sure the value is valid for the column before setting it to default
+        if self._columns[name].Validate(value):
+            self._columns[name].Default = value
+        else:
+            raise InvalidColumnValue(self.TableName, name, value)
 
