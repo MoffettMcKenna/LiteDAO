@@ -64,44 +64,52 @@ def buildDBFile():
         cur.execute(insert, ('Jane',   'Doe',   'Grams', '1024-01-28'))
 
         con.commit()
+        con.close()
 
     return 'test.db'
 
 
-def test_GetAll(buildDBFile):
+def test_Get_AllColumns(buildDBFile):
     t = Table("Person", buildDBFile)
     data = t.GetAll()
 
     assert data[0][1] == "Joe"
     assert data[0][2] == "Smith"
     assert data[0][3] == "daddy"
+    assert data[0][4] == '1911-11-11'
 
     assert data[1][1] == "June"
     assert data[1][2] == "Smith"
     assert data[1][3] == "Mommy"
+    assert data[1][4] == '2222-02-22'
 
     assert data[2][1] == "Jack"
     assert data[2][2] == "Smith"
-    assert data[2][3] == None
+    assert data[2][3] is None
+    assert data[2][4] == '2001-10-01'
 
     assert data[3][1] == "Jill"
     assert data[3][2] == "Smith"
-    assert data[3][3] == None
+    assert data[3][3] is None
+    assert data[3][4] == '2011-04-11'
 
     assert data[4][1] == "Joanna"
     assert data[4][2] == "Dane"
     assert data[4][3] == "Mimi"
+    assert data[4][4] == '2019-12-13'
 
     assert data[5][1] == "John"
     assert data[5][2] == "Doe"
     assert data[5][3] == "Pops"
+    assert data[5][4] == '1909-03-10'
 
     assert data[6][1] == "Jane"
     assert data[6][2] == "Doe"
     assert data[6][3] == "Grams"
+    assert data[6][4] == '1024-01-28'
 
 
-def test_GetOne(buildDBFile):
+def test_Get_OneColumn(buildDBFile):
     t = Table("Person", buildDBFile)
     data = t.Get(["fname"])
 
@@ -114,7 +122,7 @@ def test_GetOne(buildDBFile):
     assert data[6][0] == "Jane"
 
 
-def test_GetTwo(buildDBFile):
+def test_Get_OneColumns(buildDBFile):
     t = Table("Person", buildDBFile)
     data = t.Get(["fname", "id"])
 
@@ -142,11 +150,28 @@ def test_Filter_Null_Nickname(buildDBFile):
     assert len(data) == 2
     assert data[0][1] == "Jack"
     assert data[0][2] == "Smith"
-    assert data[0][3] == None
+    assert data[0][3] is None
 
     assert data[1][1] == "Jill"
     assert data[1][2] == "Smith"
-    assert data[1][3] == None
+    assert data[1][3] is None
+
+
+def test_Filter_LastName(buildDBFile):
+    t = Table("Person", buildDBFile)
+    t.Filter("lname", ComparisonOps.IS, 'Doe')
+    data = t.GetAll()
+
+    assert len(data) == 2
+    assert data[0][1] == "John"
+    assert data[0][2] == "Doe"
+    assert data[0][3] == "Pops"
+    assert data[0][4] == "1909-03-10"
+
+    assert data[1][1] == "Jane"
+    assert data[1][2] == "Doe"
+    assert data[1][3] == "Grams"
+    assert data[1][4] == "1024-01-28"
 
 
 def test_Get_DNE_Column(buildDBFile):
@@ -201,3 +226,57 @@ def test_Validator(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter('fname', ComparisonOps.LIKE, 'Issac')
 
+
+def test_Add_AllValues(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01'})
+    t.Filter('fname', ComparisonOps.LIKE, 'Test%')
+    data = t.GetAll()
+
+    assert len(data) == 1
+    assert data[0][1] == "TestGuy"
+    assert data[0][2] == "Testing"
+    assert data[0][3] == 'QA'
+    assert data[0][4] == '1111-01-01'
+
+    # clean up the database
+    con = sqlite3.connect('./test.db')
+    cur = con.cursor()
+    # call it sloppy to hard-code the where clause, but we inserted this above
+    cur.execute('Delete from Person where fname = "TestGuy"')
+    con.close()
+
+
+def test_Add_DefaultDefaults(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    t.Add({})
+    t.Filter('fname', ComparisonOps.LIKE, 'Test%')
+    data = t.GetAll()
+
+    assert len(data) == 1
+    assert data[0][1] == ""
+    assert data[0][2] == ""
+    assert data[0][3] == ''
+    assert data[0][4] == ''
+
+    # clean up the database
+    con = sqlite3.connect('./test.db')
+    cur = con.cursor()
+    # call it sloppy to hard-code the where clause, but we inserted this above
+    cur.execute('Delete from Person where fname = ""')
+    con.close()
+
+
+def test_Add_NewDefault(buildDBFile):
+    t = Table("Person", buildDBFile)
+    pass
+
+def test_Add_ValueOrder(buildDBFile):
+    t = Table("Person", buildDBFile)
+    pass
+
+def test_Add_InvalidColumn(buildDBFile):
+    t = Table("Person", buildDBFile)
+    pass

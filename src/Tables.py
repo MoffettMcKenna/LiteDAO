@@ -5,7 +5,12 @@ from enum import IntEnum
 
 from src.Errors import *
 
+
 # TODO add date as a special type (subset of text - sqlite doesn't have native date/time support)
+# TODO refactor the executes into a private function (_run)
+#   * isolate the connect, execute, and close calls inside
+#   * determine how to return values without knowing the query type
+#   * make thread/process safe with lock/flag file (location configurable)
 
 
 @dataclass()
@@ -44,20 +49,19 @@ class Column:
             'real': (lambda val: isinstance(val, float) or val == None),
             'text': (lambda val: isinstance(val, str) or val == None),
             'null': (lambda val: val is None),
-            'blob': (lambda val: True ) # just let it ride
+            'blob': (lambda val: True)  # just let it ride
         }
         self._validator = __VALIDATORS[self.ColumnType]
 
-        if self.DefaultType is None:
+        if self.Default is None:
             defaults = {
                 'integer': 0,
-                'real', 0.0,
+                'real': 0.0,
                 'text': '',
                 'null': None,
                 'blob': b''
             }
             self.Default = defaults[self.ColumnType]
-    
 
     def Validate(self, value: typing.Any) -> bool:
         """
@@ -135,9 +139,6 @@ class Table:
         self.DB = dbfile
         self.TableName = name
 
-        # initialize the select statement
-        self.__select = "Select {Columns} From " + self.TableName
-
         # grab the data
         self.__client = sqlite3.connect(self.DB)
         cq = self.__client.execute("pragma table_info({0})".format(self.TableName))
@@ -164,6 +165,19 @@ class Table:
         # end for col
     # end __init__()
 
+    # region Private Helpers
+
+    # helper to make sure the value is formatted properly for the column
+    def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
+        if self._columns[column].ColumnType == 'text' and val != 'null':
+            return f"{column} {op.AsStr()} '{val}' "
+        else:
+            return f"{column} {op.AsStr()} {val}"
+
+    # endregion
+
+    #region DB Interactions
+
     def Join(self, other, otherCol: str, myCol: str):
         """
         Creates a psuedo-table by performing a left join on the table other.
@@ -175,7 +189,6 @@ class Table:
         :return:
         """
         pass
-    # end Join()
 
     def GetAll(self) -> list:
         """
@@ -200,17 +213,18 @@ class Table:
         # end for c
 
         # build the query - start with the basic select portion
-        query = self.__select.format_map({'Columns': str.join(', ', columns)})
+        # initialize the select statement
+        query = f"Select {str.join(', ', columns)} From {self.TableName}"
 
         # add the where clause(s)
         if len(self._filters) > 0:
             # add the intial where
-            query += f' Where {self._filters[0].column} {self._filters[0].operator.AsStr()} {self._filters[0].value}'
+            query += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
 
             # add additional clauses if needed
             if len(self._filters) > 1:
                 for f in self._filters:
-                    query += f' and {f.column} {f.operator.AsStr()} {f.value}'
+                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
                 # end for filters
             # end if len > 1
         # end if len > 0
@@ -221,7 +235,68 @@ class Table:
 
         # marshall the results and return the rows
         return cur.fetchall()
-    # end Get()
+
+    def Add(self, values):
+        """
+        Adds a new entry to the table.
+        :param values: A map of the column names and values.  Any missing values will be filled in with the default value (except primary keys).
+        """
+
+        cols = list(self._columns.keys())
+        vals = {}
+
+        # grab the values from the parameter
+        for k in values.keys():
+            if k not in self._columns.keys():
+                raise ImaginaryColumnException(self.TableName, k)
+
+            cols.remove(k)
+            # do not add in primary keys
+            if k not in self._pks:
+                vals[k] = values[k]
+
+        # fill in any missing values with the defaults
+        for c in cols:
+            # let sqlite handle filling in the primary keys
+            if c not in self._pks:
+                vals[c] = self._columns[c].Default
+
+        mediator = "\',\'"
+
+        # with all the
+        insert = f"Insert into {self.TableName}({str.join(',', list(vals.keys()))}) values ('{str.join(mediator, list(vals.values()))}')"
+
+        # perform the action
+        cur = self.__client.cursor()
+        cur.execute(insert)
+
+    def UpdateValue(self, name: str, value: typing.Any, operator: ComparisonOps, compname: str, compval: typing.Any):
+        '''
+        Update a single column on all rows matching the condition defined by the operator, compname, and compval.
+        :param compname:
+        :param name:
+        :param value:
+        :param operator:
+        :param compval:
+        :return:
+        '''
+        # TODO fill in this func
+        pass
+
+    def Delete(self, name: str = None, operator: ComparisonOps = None, value: typing.Any = None):
+        """
+        Delete all entries matching the where clause whose details are passed in, or the current filter if none are provided.
+
+        :param name:
+        :param operator:
+        :param value:
+        :return:
+        """
+
+
+    #endregion
+
+    #region Infrastructure
 
     def Filter(self, name: str, operator: ComparisonOps, value: typing.Any):
         """
@@ -251,35 +326,12 @@ class Table:
 
         # add the filter
         self._filters.append(clause)
-    # end Filter()
 
     def ClearFilters(self):
         """
         Removes all the filters on the data.
         """
         self._filters.clear()
-
-    def Add(self, values):
-        """
-        Adds a new entry to the table.
-        :param values: A map of the column names and values.  Any missing values will be filled in with the default value (except primary keys).
-        """
-        cols = self._columns.keys()
-        vals = {}
-
-        # grab the values from the parameter
-        for k in values.keys:
-            cols.remove(k)
-            vals[k] = values[k]
-        
-        # fill in any missing values with the defaults 
-        for c in cols:
-            # let sqlite handle filling in the primary keys
-            if c not in self._pks:
-                vals[c] = self._columns[c].Default
-
-        insert = f"Insert into {self._name}({str.join(',', list(vals.keys()))}) values 
-    # end Add()
 
     def UpdateValidators(self, name: str, checker: type(len)):
         """
@@ -292,9 +344,8 @@ class Table:
             raise ImaginaryColumnException(self.TableName, name)
 
         self._columns[name].Set_Validator(checker)
-    # end UpdateValidators()
 
-    def SetDefault(self, name: str, value: typing.any):
+    def SetDefault(self, name: str, value: typing.Any):
         """
         Changes the value of the default value for the given column.
         """
@@ -308,3 +359,4 @@ class Table:
         else:
             raise InvalidColumnValue(self.TableName, name, value)
 
+    #endregion
