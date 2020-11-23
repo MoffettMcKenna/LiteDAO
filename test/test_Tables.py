@@ -68,6 +68,7 @@ def buildDBFile():
 
     return 'test.db'
 
+# region Get Tests
 
 def test_Get_AllColumns(buildDBFile):
     t = Table("Person", buildDBFile)
@@ -142,6 +143,22 @@ def test_Get_OneColumns(buildDBFile):
     assert data[6][1] == 7
 
 
+def test_Get_DNE_Column(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    with pytest.raises(src.Errors.ImaginaryColumnException):
+        data = t.Get(["name"])
+
+    with pytest.raises(src.Errors.ImaginaryColumnException):
+        data = t.Get(["id, fname, name"])
+
+    with pytest.raises(src.Errors.ImaginaryColumnException):
+        data = t.Get(["id, name, lname"])
+
+# endregion
+
+# region Filter Tests
+
 def test_Filter_Null_Nickname(buildDBFile):
     t = Table("Person", buildDBFile)
     t.Filter("nickname", ComparisonOps.IS, None)
@@ -174,19 +191,6 @@ def test_Filter_LastName(buildDBFile):
     assert data[1][4] == "1024-01-28"
 
 
-def test_Get_DNE_Column(buildDBFile):
-    t = Table("Person", buildDBFile)
-
-    with pytest.raises(src.Errors.ImaginaryColumnException):
-        data = t.Get(["name"])
-
-    with pytest.raises(src.Errors.ImaginaryColumnException):
-        data = t.Get(["id, fname, name"])
-
-    with pytest.raises(src.Errors.ImaginaryColumnException):
-        data = t.Get(["id, name, lname"])
-
-
 def test_ClearFilters(buildDBFile):
     t = Table("Person", buildDBFile)
     t.Filter("nickname", ComparisonOps.IS, None)
@@ -209,6 +213,9 @@ def test_Filter_InvalidValue(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter("nickname", ComparisonOps.IS, 20)
 
+# endregion
+
+#region Validator Tests
 
 def startsJ(value: str) -> bool:
     return value.startswith('J')
@@ -226,6 +233,9 @@ def test_Validator(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter('fname', ComparisonOps.LIKE, 'Issac')
 
+# endregion
+
+# region Add Tests
 
 def test_Add_AllValues(buildDBFile):
     t = Table("Person", buildDBFile)
@@ -273,10 +283,14 @@ def test_Add_NewDefault(buildDBFile):
     t = Table("Person", buildDBFile)
     pass
 
+
 def test_Add_ValueOrder(buildDBFile):
     t = Table("Person", buildDBFile)
     pass
 
+
 def test_Add_InvalidColumn(buildDBFile):
     t = Table("Person", buildDBFile)
     pass
+
+# endregion

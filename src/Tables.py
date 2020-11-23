@@ -11,7 +11,8 @@ from src.Errors import *
 #   * isolate the connect, execute, and close calls inside
 #   * determine how to return values without knowing the query type
 #   * make thread/process safe with lock/flag file (location configurable)
-
+# TODO check for errors raised on add - re-add value with unique on column?
+# TODO allow for comparison values in the filtering conditions to be other columns, or columns from other tables.
 
 @dataclass()
 class Column:
@@ -91,6 +92,7 @@ class ComparisonOps(IntEnum):
     """
     Enumeration of the operations usable in filters for the Tables class.
     """
+    Noop = 0
     EQUALS = 1
     NOTEQ = 2
     GREATER = 3
@@ -128,12 +130,16 @@ class Table:
     Defines a single table from the database.  Provides operations to read and write, but not create.
     """
 
+    # region 'Constants'
+
     # Expected label names from the pragma read
     __LBLNAME = 'name'  # name of the column
     __LBLTYPE = 'type'  # data type of the column
     __LBLDFT = 'dflt_value'  # default value of the column
     __LBLPK = 'pk'  # primary key flag
     __LBLNN = 'notnull'  # notnull/nullable flag
+
+    #endregion
 
     def __init__(self, name: str, dbfile: str):
         self.DB = dbfile
@@ -169,6 +175,7 @@ class Table:
 
     # helper to make sure the value is formatted properly for the column
     def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
+
         if self._columns[column].ColumnType == 'text' and val != 'null':
             return f"{column} {op.AsStr()} '{val}' "
         else:
@@ -270,29 +277,109 @@ class Table:
         cur = self.__client.cursor()
         cur.execute(insert)
 
-    def UpdateValue(self, name: str, value: typing.Any, operator: ComparisonOps, compname: str, compval: typing.Any):
-        '''
-        Update a single column on all rows matching the condition defined by the operator, compname, and compval.
-        :param compname:
-        :param name:
-        :param value:
-        :param operator:
-        :param compval:
-        :return:
-        '''
-        # TODO fill in this func
-        pass
-
-    def Delete(self, name: str = None, operator: ComparisonOps = None, value: typing.Any = None):
+    def UpdateValue(self, name: str, value: typing.Any, operator: ComparisonOps = ComparisonOps.Noop, compname: str = ''
+                    , compval: typing.Any = None):
         """
-        Delete all entries matching the where clause whose details are passed in, or the current filter if none are provided.
+        Update a single column on all rows matching the condition defined by the operator, compname, and compval.  If no
+        condition is defined here, the current filter is used.
 
-        :param name:
-        :param operator:
-        :param value:
-        :return:
+        :param compname: The name of the column the condition is based on.
+        :param name: Name of the column to update.
+        :param value: The new value of the column.
+        :param operator: the operator for the condition clause.
+        :param compval: The value to compare the current value of the column to.
         """
+        # TODO make the where clause a list of tuples or actual where objects?
 
+        # verify the column
+        if name not in self._columns.keys():
+            raise ImaginaryColumnException(self.TableName, name)
+
+        # verify the value is legal
+        if not self._columns[name].Validate(value):
+            raise InvalidColumnValue(self.TableName, name, value)
+
+        # create the base update statement
+        update = f'Update {self.TableName} set {name} = {value}'
+
+        # if there is an operator we have an in-line filter
+        if operator != ComparisonOps.Noop:
+
+            # verify we're filtering based on a legitmate column
+            if compname not in self._columns.keys():
+                raise ImaginaryColumnException(self.TableName, compname)
+
+            # TODO verify the operation is valid for the column type
+
+            # verify the value validates
+            if not self._columns[compname].Validate(compval):
+                raise InvalidColumnValue(self.TableName, compname, compval)
+
+            # add the where clause
+            update += f" Where {self._buildWhere(compname, operator, compval)}"
+
+        # if in-line filter not added, then grab the current filters
+        elif len(self._filters) > 0:
+
+            # add the intial where
+            update += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
+
+            # add additional clauses if needed
+            if len(self._filters) > 1:
+                for f in self._filters:
+                    update += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                # end for filters
+            # end if len > 1
+        # end if len > 0
+
+        # perform the action
+        cur = self.__client.cursor()
+        cur.execute(update)
+
+    def Delete(self, name: str = None, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any = None):
+        """
+        Delete all entries matching the where clause whose details are passed in, or the current filter if none are
+        provided.
+
+        :param name: The name of the column the delete condition is based on.
+        :param operator: The operator for the condition.
+        :param value: The value to compare the current value of the column to.
+        """
+        # TODO make the where clause a list of tuples or actual where objects?
+
+        # if there is an operator we have an in-line filter
+        if operator != ComparisonOps.Noop:
+
+            # verify we're filtering based on a legitmate column
+            if name not in self._columns.keys():
+                raise ImaginaryColumnException(self.TableName, name)
+
+            # TODO verify the operation is valid for the column type
+
+            # verify the value validates
+            if not self._columns[name].Validate(value):
+                raise InvalidColumnValue(self.TableName, name, value)
+
+            # add the where clause
+            delete = f"Delete from {self.TableName} Where {self._buildWhere(name, operator, value)}"
+
+        # if in-line filter not added, then grab the current filters
+        elif len(self._filters) > 0:
+
+            # add the intial where
+            delete = f"Delete from {self.TableName}  Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
+
+            # add additional clauses if needed
+            if len(self._filters) > 1:
+                for f in self._filters:
+                    delete += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                # end for filters
+            # end if len > 1
+        # end if len > 0
+
+        # perform the action
+        cur = self.__client.cursor()
+        cur.execute(delete)
 
     #endregion
 
@@ -310,7 +397,7 @@ class Table:
         if name not in self._columns.keys():
             raise ImaginaryColumnException(self.TableName, name)
 
-        # verify the operation is valid for the column type
+        # TODO verify the operation is valid for the column type
 
         # verify the value is the correct type
         if not self._columns[name].Validate(value):
