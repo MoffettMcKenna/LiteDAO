@@ -2,6 +2,7 @@ import pytest
 import sqlite3
 import os
 import sys
+
 sys.path.insert(1, "../")
 from src.Tables import Table
 from src.Tables import ComparisonOps
@@ -55,18 +56,19 @@ def buildDBFile():
         # bday format -> YYYY-MM-DD
 
         insert = 'Insert into Person (fname, lname, nickname, birthday) values (?, ?, ?, ?)'
-        cur.execute(insert, ('Joe',    'Smith', 'daddy', '1911-11-11'))
-        cur.execute(insert, ('June',   'Smith', 'Mommy', '2222-02-22'))
-        cur.execute(insert, ('Jack',   'Smith', None,    '2001-10-01'))
-        cur.execute(insert, ('Jill',   'Smith', None,    '2011-04-11'))
-        cur.execute(insert, ('Joanna', 'Dane',  'Mimi',  '2019-12-13'))
-        cur.execute(insert, ('John',   'Doe',   'Pops',  '1909-03-10'))
-        cur.execute(insert, ('Jane',   'Doe',   'Grams', '1024-01-28'))
+        cur.execute(insert, ('Joe', 'Smith', 'daddy', '1911-11-11'))
+        cur.execute(insert, ('June', 'Smith', 'Mommy', '2222-02-22'))
+        cur.execute(insert, ('Jack', 'Smith', None, '2001-10-01'))
+        cur.execute(insert, ('Jill', 'Smith', None, '2011-04-11'))
+        cur.execute(insert, ('Joanna', 'Dane', 'Mimi', '2019-12-13'))
+        cur.execute(insert, ('John', 'Doe', 'Pops', '1909-03-10'))
+        cur.execute(insert, ('Jane', 'Doe', 'Grams', '1024-01-28'))
 
         con.commit()
         con.close()
 
     return 'test.db'
+
 
 # region Get Tests
 
@@ -146,14 +148,15 @@ def test_Get_OneColumns(buildDBFile):
 def test_Get_DNE_Column(buildDBFile):
     t = Table("Person", buildDBFile)
 
-    with pytest.raises(src.Errors.ImaginaryColumnException):
+    with pytest.raises(src.Errors.ImaginaryColumn):
         data = t.Get(["name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumnException):
+    with pytest.raises(src.Errors.ImaginaryColumn):
         data = t.Get(["id, fname, name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumnException):
+    with pytest.raises(src.Errors.ImaginaryColumn):
         data = t.Get(["id, name, lname"])
+
 
 # endregion
 
@@ -213,9 +216,10 @@ def test_Filter_InvalidValue(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter("nickname", ComparisonOps.IS, 20)
 
+
 # endregion
 
-#region Validator Tests
+# region Validator Tests
 
 def startsJ(value: str) -> bool:
     return value.startswith('J')
@@ -232,6 +236,7 @@ def test_Validator(buildDBFile):
     # this will fail
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter('fname', ComparisonOps.LIKE, 'Issac')
+
 
 # endregion
 
@@ -251,18 +256,14 @@ def test_Add_AllValues(buildDBFile):
     assert data[0][4] == '1111-01-01'
 
     # clean up the database
-    con = sqlite3.connect('./test.db')
-    cur = con.cursor()
-    # call it sloppy to hard-code the where clause, but we inserted this above
-    cur.execute('Delete from Person where fname = "TestGuy"')
-    con.close()
+    t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
 
 
 def test_Add_DefaultDefaults(buildDBFile):
     t = Table("Person", buildDBFile)
 
     t.Add({})
-    t.Filter('fname', ComparisonOps.LIKE, 'Test%')
+    t.Filter('fname', ComparisonOps.IS, '')
     data = t.GetAll()
 
     assert len(data) == 1
@@ -272,25 +273,178 @@ def test_Add_DefaultDefaults(buildDBFile):
     assert data[0][4] == ''
 
     # clean up the database
-    con = sqlite3.connect('./test.db')
-    cur = con.cursor()
-    # call it sloppy to hard-code the where clause, but we inserted this above
-    cur.execute('Delete from Person where fname = ""')
-    con.close()
+    # clean up the database
+    t.Delete('fname', ComparisonOps.EQUALS, '')
 
 
 def test_Add_NewDefault(buildDBFile):
     t = Table("Person", buildDBFile)
+    t.SetDefault('fname', 'Tony')
+    t.SetDefault('lname', 'Testing')
+
+    t.Add({})
+    t.Filter('fname', ComparisonOps.IS, 'Tony')
+    data = t.GetAll()
+
+    assert len(data) == 1
+    assert data[0][1] == "Tony"
+    assert data[0][2] == "Testing"
+    assert data[0][3] == ''
+    assert data[0][4] == ''
+
+    # clean up the database
+    # clean up the database
+    t.Delete('fname', ComparisonOps.EQUALS, 'Tony')
+
     pass
 
 
+# verify the order of the values doesn't matter to the add
 def test_Add_ValueOrder(buildDBFile):
     t = Table("Person", buildDBFile)
-    pass
+
+    t.Add({'nickname': 'QA', 'lname': 'Testing', 'fname': 'TestGuy', 'birthday': '1111-01-01'})
+    t.Filter('fname', ComparisonOps.LIKE, 'Test%')
+    data = t.GetAll()
+
+    assert len(data) == 1
+    assert data[0][1] == "TestGuy"
+    assert data[0][2] == "Testing"
+    assert data[0][3] == 'QA'
+    assert data[0][4] == '1111-01-01'
+
+    # clean up the database
+    t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
 
 
 def test_Add_InvalidColumn(buildDBFile):
     t = Table("Person", buildDBFile)
+
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        t.Add({'name': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01'})
+
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nick': 'QA', 'birthday': '1111-01-01'})
+
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01', 'age': 10})
+
+
+# endregion
+
+# region Delete Tests
+
+def test_DeleteOne(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    # confirm the expected number of entries
+    data1 = t.GetAll()
+    assert len(data1) == 7
+
+    # operation under test
+    t.Delete('nickname', ComparisonOps.IS, 'Mimi')
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == 6
+
+    # ensure only one was deleted
+    assert len(data1) == len(data2) + 1
+
+    # nuke the db version number so it gets reset for the next test
+    v = Table('version', buildDBFile)
+    v.UpdateValue('version', 0)
+
+
+def test_DeleteMultiple(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    # confirm the expected number of entries
+    data1 = t.GetAll()
+    assert len(data1) == 7
+
+    # operation under test
+    t.Delete('nickname', ComparisonOps.IS, None)
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == 5
+
+    # ensure only one was deleted
+    assert len(data1) == len(data2) + 2
+
+    # nuke the db version number so it gets reset for the next test
+    v = Table('version', buildDBFile)
+    v.UpdateValue('version', 0)
+
+
+def test_Delete_ClassFilter(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    # confirm the expected number of entries
+    data1 = t.GetAll()
+    assert len(data1) == 7
+
+    # set the filter
+    t.Filter('lname', ComparisonOps.IS, 'Smith')
+
+    # operation under test
+    t.Delete()
+
+    # clear the filter so the get reads all
+    t.ClearFilters()
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == 3
+
+    # ensure only one was deleted
+    assert len(data1) == len(data2) + 4
+
+    # nuke the db version number so it gets reset for the next test
+    v = Table('version', buildDBFile)
+    v.UpdateValue('version', 0)
+
+
+def test_Delete_BadColumn(buildDBFile):
     pass
 
+
+def test_Delete_BadFilterValue(buildDBFile):
+    pass
+
+# endregion
+
+# region Update Tests
+
+def test_UpdateOne(buildDBFile):
+    pass
+
+
+def test_UpdateMultiple(buildDBFile):
+    pass
+
+
+def test_Update_FilterArgs(buildDBFile):
+    pass
+
+
+def test_Update_ClassFilter(buildDBFile):
+    pass
+
+
+def test_Update_BadUpdateColumn(buildDBFile):
+    pass
+
+
+def test_Update_BadUpdateValue(buildDBFile):
+    pass
+
+
+def test_Update_BadFilterColumn(buildDBFile):
+    pass
+
+
+def test_Update_BadFilterValue(buildDBFile):
+    pass
 # endregion
