@@ -1,6 +1,6 @@
 
 
-class ImaginaryColumnException(BaseException):
+class ImaginaryColumn(BaseException):
     """
     Exception for when the user asks for a column which doesn't exist.
     """

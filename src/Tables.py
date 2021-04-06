@@ -176,10 +176,12 @@ class Table:
     # helper to make sure the value is formatted properly for the column
     def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
 
+        # build the clause
         if self._columns[column].ColumnType == 'text' and val != 'null':
             return f"{column} {op.AsStr()} '{val}' "
         else:
             return f"{column} {op.AsStr()} {val}"
+
 
     # endregion
 
@@ -216,7 +218,7 @@ class Table:
         # sanity check the columns
         for c in columns:
             if c not in self._columns.keys():
-                raise ImaginaryColumnException(self.TableName, c)
+                raise ImaginaryColumn(self.TableName, c)
         # end for c
 
         # build the query - start with the basic select portion
@@ -255,7 +257,7 @@ class Table:
         # grab the values from the parameter
         for k in values.keys():
             if k not in self._columns.keys():
-                raise ImaginaryColumnException(self.TableName, k)
+                raise ImaginaryColumn(self.TableName, k)
 
             cols.remove(k)
             # do not add in primary keys
@@ -276,8 +278,9 @@ class Table:
         # perform the action
         cur = self.__client.cursor()
         cur.execute(insert)
+        self.__client.commit()
 
-    def UpdateValue(self, name: str, value: typing.Any, operator: ComparisonOps = ComparisonOps.Noop, compname: str = ''
+    def UpdateValue(self, name: str, value: typing.Any, compname: str = '', operator: ComparisonOps = ComparisonOps.Noop
                     , compval: typing.Any = None):
         """
         Update a single column on all rows matching the condition defined by the operator, compname, and compval.  If no
@@ -293,21 +296,25 @@ class Table:
 
         # verify the column
         if name not in self._columns.keys():
-            raise ImaginaryColumnException(self.TableName, name)
+            raise ImaginaryColumn(self.TableName, name)
 
         # verify the value is legal
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
         # create the base update statement
-        update = f'Update {self.TableName} set {name} = {value}'
+        # make sure to wrap text values in ""
+        if self._columns[name].ColumnType == 'text' and value != 'null':
+            update = f'Update {self.TableName} set {name} = "{value}"'
+        else:
+            update = f'Update {self.TableName} set {name} = {value}'
 
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
 
             # verify we're filtering based on a legitmate column
             if compname not in self._columns.keys():
-                raise ImaginaryColumnException(self.TableName, compname)
+                raise ImaginaryColumn(self.TableName, compname)
 
             # TODO verify the operation is valid for the column type
 
@@ -335,6 +342,7 @@ class Table:
         # perform the action
         cur = self.__client.cursor()
         cur.execute(update)
+        self.__client.commit()
 
     def Delete(self, name: str = None, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any = None):
         """
@@ -347,12 +355,21 @@ class Table:
         """
         # TODO make the where clause a list of tuples or actual where objects?
 
+        # convert None to null
+        if value is None:
+            val = 'null'
+        else:
+            val = value
+
+        # start the delete statement
+        delete = f'Delete from {self.TableName}'
+
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
 
             # verify we're filtering based on a legitmate column
             if name not in self._columns.keys():
-                raise ImaginaryColumnException(self.TableName, name)
+                raise ImaginaryColumn(self.TableName, name)
 
             # TODO verify the operation is valid for the column type
 
@@ -361,25 +378,36 @@ class Table:
                 raise InvalidColumnValue(self.TableName, name, value)
 
             # add the where clause
-            delete = f"Delete from {self.TableName} Where {self._buildWhere(name, operator, value)}"
+            delete += f" Where {self._buildWhere(name, operator, val)}"
 
-        # if in-line filter not added, then grab the current filters
-        elif len(self._filters) > 0:
+        # check for class filters - makes this more dangerous, but gives more power to user
+        if len(self._filters) > 0:
 
-            # add the intial where
-            delete = f"Delete from {self.TableName}  Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
+            # check for a where clause already in the delete statement
+            if delete.lower().find('where') > 0:
+                # add an and to bridge the clauses
+                delete += 'and'
+            else:
+                delete += ' Where'
+
+            # add the first where from class filters
+            delete += f" {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
 
             # add additional clauses if needed
             if len(self._filters) > 1:
                 for f in self._filters:
-                    delete += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                    delete += f'and {self._buildWhere(f.column, f.operator, f.value)}'
                 # end for filters
             # end if len > 1
         # end if len > 0
 
         # perform the action
         cur = self.__client.cursor()
-        cur.execute(delete)
+        try:
+            cur.execute(delete)
+            self.__client.commit()
+        except sqlite3.OperationalError:
+            print(delete)
 
     #endregion
 
@@ -395,7 +423,7 @@ class Table:
 
         # verify the column
         if name not in self._columns.keys():
-            raise ImaginaryColumnException(self.TableName, name)
+            raise ImaginaryColumn(self.TableName, name)
 
         # TODO verify the operation is valid for the column type
 
@@ -428,7 +456,7 @@ class Table:
         """
         # verify the column
         if name not in self._columns.keys():
-            raise ImaginaryColumnException(self.TableName, name)
+            raise ImaginaryColumn(self.TableName, name)
 
         self._columns[name].Set_Validator(checker)
 
@@ -438,7 +466,7 @@ class Table:
         """
         # verify the column
         if name not in self._columns.keys():
-            raise ImaginaryColumnException(self.TableName, name)
+            raise ImaginaryColumn(self.TableName, name)
 
         # make sure the value is valid for the column before setting it to default
         if self._columns[name].Validate(value):

@@ -176,6 +176,8 @@ def test_Filter_Null_Nickname(buildDBFile):
     assert data[1][2] == "Smith"
     assert data[1][3] is None
 
+    t.ClearFilters()
+
 
 def test_Filter_LastName(buildDBFile):
     t = Table("Person", buildDBFile)
@@ -192,6 +194,8 @@ def test_Filter_LastName(buildDBFile):
     assert data[1][2] == "Doe"
     assert data[1][3] == "Grams"
     assert data[1][4] == "1024-01-28"
+
+    t.ClearFilters()
 
 
 def test_ClearFilters(buildDBFile):
@@ -216,6 +220,8 @@ def test_Filter_InvalidValue(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter("nickname", ComparisonOps.IS, 20)
 
+    # just to be safe
+    t.ClearFilters()
 
 # endregion
 
@@ -237,6 +243,9 @@ def test_Validator(buildDBFile):
     with pytest.raises(src.Errors.InvalidColumnValue):
         t.Filter('fname', ComparisonOps.LIKE, 'Issac')
 
+    # now clear the filters for future tests
+    t.ClearFilters()
+
 
 # endregion
 
@@ -255,6 +264,9 @@ def test_Add_AllValues(buildDBFile):
     assert data[0][3] == 'QA'
     assert data[0][4] == '1111-01-01'
 
+    # clear the filters
+    t.ClearFilters()
+
     # clean up the database
     t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
 
@@ -272,7 +284,9 @@ def test_Add_DefaultDefaults(buildDBFile):
     assert data[0][3] == ''
     assert data[0][4] == ''
 
-    # clean up the database
+    # clean up the filters
+    t.ClearFilters()
+
     # clean up the database
     t.Delete('fname', ComparisonOps.EQUALS, '')
 
@@ -292,11 +306,11 @@ def test_Add_NewDefault(buildDBFile):
     assert data[0][3] == ''
     assert data[0][4] == ''
 
-    # clean up the database
+    # erase filters
+    t.ClearFilters()
+
     # clean up the database
     t.Delete('fname', ComparisonOps.EQUALS, 'Tony')
-
-    pass
 
 
 # verify the order of the values doesn't matter to the add
@@ -312,6 +326,9 @@ def test_Add_ValueOrder(buildDBFile):
     assert data[0][2] == "Testing"
     assert data[0][3] == 'QA'
     assert data[0][4] == '1111-01-01'
+
+    # erase filters
+    t.ClearFilters()
 
     # clean up the database
     t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
@@ -407,44 +424,374 @@ def test_Delete_ClassFilter(buildDBFile):
 
 
 def test_Delete_BadColumn(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # confirm the expected number of entries
+    data1 = t.GetAll()
+    assert len(data1) == 7
+
+    # try to delete based on a non-existant column
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        t.Delete('name', ComparisonOps.IS, 'Mimi')
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == len(data1)
 
 
 def test_Delete_BadFilterValue(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # confirm the expected number of entries
+    data1 = t.GetAll()
+    assert len(data1) == 7
+
+    # try to delete based on a non-existant column
+    with pytest.raises(src.Errors.InvalidColumnValue):
+        t.Delete('nickname', ComparisonOps.IS, 10)
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == len(data1)
+
+
+# test running with both inline and class filters
+def test_Delete_DualFilterType(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    # set the filter
+    t.Filter('lname', ComparisonOps.IS, 'Doe')
+
+    # confirm the expected number of entries with last name Doe
+    data1 = t.GetAll()
+    assert len(data1) == 2
+
+    # operation under test
+    t.Delete('nickname', ComparisonOps.EQUALS, 'Pops')
+
+    # clear the filter so the get reads all
+    t.ClearFilters()
+
+    # confirm the expected number of entries
+    data2 = t.GetAll()
+    assert len(data2) == 6
+
+    # make sure the correct one was deleted
+    assert data2[0][1] == "Joe"
+    assert data2[0][2] == "Smith"
+    assert data2[0][3] == "daddy"
+    assert data2[0][4] == '1911-11-11'
+
+    assert data2[1][1] == "June"
+    assert data2[1][2] == "Smith"
+    assert data2[1][3] == "Mommy"
+    assert data2[1][4] == '2222-02-22'
+
+    assert data2[2][1] == "Jack"
+    assert data2[2][2] == "Smith"
+    assert data2[2][3] is None
+    assert data2[2][4] == '2001-10-01'
+
+    assert data2[3][1] == "Jill"
+    assert data2[3][2] == "Smith"
+    assert data2[3][3] is None
+    assert data2[3][4] == '2011-04-11'
+
+    assert data2[4][1] == "Joanna"
+    assert data2[4][2] == "Dane"
+    assert data2[4][3] == "Mimi"
+    assert data2[4][4] == '2019-12-13'
+
+    assert data2[5][1] == "Jane"
+    assert data2[5][2] == "Doe"
+    assert data2[5][3] == "Grams"
+    assert data2[5][4] == '1024-01-28'
+
+    # nuke the db version number so it gets reset for the next test
+    v = Table('version', buildDBFile)
+    v.UpdateValue('version', 0)
+
 
 # endregion
 
 # region Update Tests
 
 def test_UpdateOne(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # perform the operation under test
+    t.UpdateValue("nickname", "Gram", "lname", ComparisonOps.IS, "Dane")
+
+    # isolate the changed field and read it
+    data = t.GetAll()
+
+    # verify the changes, and only the changes
+    assert len(data) == 7
+
+    assert data[0][1] == "Joe"
+    assert data[0][2] == "Smith"
+    assert data[0][3] == "daddy"
+    assert data[0][4] == '1911-11-11'
+
+    assert data[1][1] == "June"
+    assert data[1][2] == "Smith"
+    assert data[1][3] == "Mommy"
+    assert data[1][4] == '2222-02-22'
+
+    assert data[2][1] == "Jack"
+    assert data[2][2] == "Smith"
+    assert data[2][3] is None
+    assert data[2][4] == '2001-10-01'
+
+    assert data[3][1] == "Jill"
+    assert data[3][2] == "Smith"
+    assert data[3][3] is None
+    assert data[3][4] == '2011-04-11'
+
+    assert data[4][1] == "Joanna"
+    assert data[4][2] == "Dane"
+    assert data[4][3] == "Gram"
+    assert data[4][4] == '2019-12-13'
+
+    assert data[5][1] == "John"
+    assert data[5][2] == "Doe"
+    assert data[5][3] == "Pops"
+    assert data[5][4] == '1909-03-10'
+
+    assert data[6][1] == "Jane"
+    assert data[6][2] == "Doe"
+    assert data[6][3] == "Grams"
+    assert data[6][4] == '1024-01-28'
+
+    # trash the version to get the db rebuilt on next run
+    t2 = Table("Version", buildDBFile)
+    t2.UpdateValue("version", 0)
 
 
 def test_UpdateMultiple(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # perform the operation under test
+    t.UpdateValue("nickname", "Test", "lname", ComparisonOps.IS, "Doe")
+
+    data = t.GetAll()
+
+    # verify the changes, and only the changes
+    assert len(data) == 7
+
+    assert data[0][1] == "Joe"
+    assert data[0][2] == "Smith"
+    assert data[0][3] == "daddy"
+    assert data[0][4] == '1911-11-11'
+
+    assert data[1][1] == "June"
+    assert data[1][2] == "Smith"
+    assert data[1][3] == "Mommy"
+    assert data[1][4] == '2222-02-22'
+
+    assert data[2][1] == "Jack"
+    assert data[2][2] == "Smith"
+    assert data[2][3] is None
+    assert data[2][4] == '2001-10-01'
+
+    assert data[3][1] == "Jill"
+    assert data[3][2] == "Smith"
+    assert data[3][3] is None
+    assert data[3][4] == '2011-04-11'
+
+    assert data[4][1] == "Joanna"
+    assert data[4][2] == "Dane"
+    assert data[4][3] == "Mimi"
+    assert data[4][4] == '2019-12-13'
+
+    assert data[5][1] == "John"
+    assert data[5][2] == "Doe"
+    assert data[5][3] == "Test"
+    assert data[5][4] == '1909-03-10'
+
+    assert data[6][1] == "Jane"
+    assert data[6][2] == "Doe"
+    assert data[6][3] == "Test"
+    assert data[6][4] == '1024-01-28'
+
+    # trash the version to get the db rebuilt on next run
+    t2 = Table("Version", buildDBFile)
+    t2.UpdateValue("version", 0)
 
 
-def test_Update_FilterArgs(buildDBFile):
-    pass
+def test_Update_PresetFilter(buildDBFile):
+    t = Table("Person", buildDBFile)
 
+    t.Filter('lname', ComparisonOps.IS, 'Doe')
 
-def test_Update_ClassFilter(buildDBFile):
-    pass
+    # perform the operation under test
+    t.UpdateValue("nickname", "Test")
+
+    data = t.GetAll()
+
+    # verify the changes, and only the changes
+    assert len(data) == 2
+
+    assert data[0][1] == "John"
+    assert data[0][2] == "Doe"
+    assert data[0][3] == "Test"
+    assert data[0][4] == '1909-03-10'
+
+    assert data[1][1] == "Jane"
+    assert data[1][2] == "Doe"
+    assert data[1][3] == "Test"
+    assert data[1][4] == '1024-01-28'
+
+    # trash the version to get the db rebuilt on next run
+    t2 = Table("Version", buildDBFile)
+    t2.UpdateValue("version", 0)
 
 
 def test_Update_BadUpdateColumn(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # try to update a non-existant column
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        # perform the operation under test
+        t.UpdateValue("nick", "Test", "lname", ComparisonOps.IS, "Doe")
+
+    # apply the filter and read the db
+    t.Filter("lname", ComparisonOps.IS, 'Doe')
+    data = t.GetAll()
+
+    # confirm no changes
+    assert len(data) == 2
+    assert data[0][1] == "John"
+    assert data[0][2] == "Doe"
+    assert data[0][3] == "Pops"
+    assert data[0][4] == "1909-03-10"
+
+    assert data[1][1] == "Jane"
+    assert data[1][2] == "Doe"
+    assert data[1][3] == "Grams"
+    assert data[1][4] == "1024-01-28"
 
 
 def test_Update_BadUpdateValue(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # try to update a non-existant column
+    with pytest.raises(src.Errors.InvalidColumnValue):
+        # perform the operation under test
+        t.UpdateValue("nickname", 10, "lname", ComparisonOps.IS, "Doe")
+
+    # apply the filter and read the db
+    t.Filter("lname", ComparisonOps.IS, 'Doe')
+    data = t.GetAll()
+
+    # confirm no changes
+    assert len(data) == 2
+    assert data[0][1] == "John"
+    assert data[0][2] == "Doe"
+    assert data[0][3] == "Pops"
+    assert data[0][4] == "1909-03-10"
+
+    assert data[1][1] == "Jane"
+    assert data[1][2] == "Doe"
+    assert data[1][3] == "Grams"
+    assert data[1][4] == "1024-01-28"
 
 
 def test_Update_BadFilterColumn(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # try to update a non-existant column
+    with pytest.raises(src.Errors.ImaginaryColumn):
+        # perform the operation under test
+        t.UpdateValue("nickname", "Test", "lame", ComparisonOps.IS, "Doe")
+
+    # and read the db
+    data = t.GetAll()
+
+    # confirm no changes
+    assert len(data) == 7
+    assert data[0][1] == "Joe"
+    assert data[0][2] == "Smith"
+    assert data[0][3] == "daddy"
+    assert data[0][4] == '1911-11-11'
+
+    assert data[1][1] == "June"
+    assert data[1][2] == "Smith"
+    assert data[1][3] == "Mommy"
+    assert data[1][4] == '2222-02-22'
+
+    assert data[2][1] == "Jack"
+    assert data[2][2] == "Smith"
+    assert data[2][3] is None
+    assert data[2][4] == '2001-10-01'
+
+    assert data[3][1] == "Jill"
+    assert data[3][2] == "Smith"
+    assert data[3][3] is None
+    assert data[3][4] == '2011-04-11'
+
+    assert data[4][1] == "Joanna"
+    assert data[4][2] == "Dane"
+    assert data[4][3] == "Mimi"
+    assert data[4][4] == '2019-12-13'
+
+    assert data[5][1] == "John"
+    assert data[5][2] == "Doe"
+    assert data[5][3] == "Pops"
+    assert data[5][4] == '1909-03-10'
+
+    assert data[6][1] == "Jane"
+    assert data[6][2] == "Doe"
+    assert data[6][3] == "Grams"
+    assert data[6][4] == '1024-01-28'
 
 
 def test_Update_BadFilterValue(buildDBFile):
-    pass
+    t = Table("Person", buildDBFile)
+
+    # try to update a non-existant column
+    with pytest.raises(src.Errors.InvalidColumnValue):
+        # perform the operation under test
+        t.UpdateValue("nickname", "Test", "lname", ComparisonOps.IS, 10)
+
+    # read the db
+    data = t.GetAll()
+
+    # confirm no changes
+    assert len(data) == 7
+    assert data[0][1] == "Joe"
+    assert data[0][2] == "Smith"
+    assert data[0][3] == "daddy"
+    assert data[0][4] == '1911-11-11'
+
+    assert data[1][1] == "June"
+    assert data[1][2] == "Smith"
+    assert data[1][3] == "Mommy"
+    assert data[1][4] == '2222-02-22'
+
+    assert data[2][1] == "Jack"
+    assert data[2][2] == "Smith"
+    assert data[2][3] is None
+    assert data[2][4] == '2001-10-01'
+
+    assert data[3][1] == "Jill"
+    assert data[3][2] == "Smith"
+    assert data[3][3] is None
+    assert data[3][4] == '2011-04-11'
+
+    assert data[4][1] == "Joanna"
+    assert data[4][2] == "Dane"
+    assert data[4][3] == "Mimi"
+    assert data[4][4] == '2019-12-13'
+
+    assert data[5][1] == "John"
+    assert data[5][2] == "Doe"
+    assert data[5][3] == "Pops"
+    assert data[5][4] == '1909-03-10'
+
+    assert data[6][1] == "Jane"
+    assert data[6][2] == "Doe"
+    assert data[6][3] == "Grams"
+    assert data[6][4] == '1024-01-28'
+
 # endregion

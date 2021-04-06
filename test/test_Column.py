@@ -1,7 +1,7 @@
 import pytest
 import sys
-sys.path.insert(1, '../src/')
-from Tables import Column
+sys.path.insert(1, "../")
+from src.Tables import Column
 
 @pytest.fixture
 def headers():
@@ -12,7 +12,7 @@ def test_Int_Column_Init(headers):
     c = Column((0, 'id', 'integer', 0, None, 1), headers)
     assert c.Name == 'id'
     assert c.ColumnType == 'integer'
-    assert c.Default == None
+    assert c.Default == 0
     assert c.PrimaryKey == 1
     assert c.NotNull == 0
 
