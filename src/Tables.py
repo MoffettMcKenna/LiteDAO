@@ -475,3 +475,95 @@ class Table:
             raise InvalidColumnValue(self.TableName, name, value)
 
     #endregion
+
+
+class JoinedTable (Table):
+    """
+    A joined table is a left (primary) and right (secondary) table where the left table is extended with the columns
+    from the right table based on common values in specific columns.  In classic DB speak this is a left join with
+    the all the entries from the primary table present but only the matching entries from the secondary table.
+    """
+
+    # Select A.Cols, B.Cols from A,B where A.ndx = B.a
+
+    def __init__(self, primary: Table, secondary: Table, primaryCol: str, secondaryCol: str):
+        self.DB = primary.DB
+        self.TableName = primary.TableName + "-" + secondary.TableName
+
+        # grab the data
+        self.__client = sqlite3.connect(self.DB)
+        cq = self.__client.execute("pragma table_info({0})".format(self.TableName))
+
+        # init the columns dictionary and primary keys list
+        self._columns = {}  # this will hold _Column objects indexed by name
+        self._pks = []  # a list of the names of primary keys
+        self._filters = []  # where clauses
+
+        # clabels are the pragma field names for the column meta data
+        self._clabels = [x[0] for x in cq.description]
+
+        # move the data into the dictionary
+        for col in cq.fetchall():
+            name = col[self._clabels.index(self.__LBLNAME)]
+
+            # save the name of the column by the index of the key
+            self._columns[name] = Column(pragma=col, headers=self._clabels)
+
+            # test for pk status
+            if self._columns[name].PrimaryKey:
+                # if this is a primary key save it in that list
+                self._pks.append(name)
+        # end for col
+
+    # end __init__()
+
+    def Get(self, columns: list) -> list:
+        """
+        Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
+        returned.
+
+        :param columns: A list of the column names to select.
+        :return:
+        """
+
+        # sanity check the columns
+        for c in columns:
+            if c not in self._columns.keys():
+                raise ImaginaryColumn(self.TableName, c)
+        # end for c
+
+        # build the query - start with the basic select portion
+        # initialize the select statement
+        query = f"Select {str.join(', ', columns)} From {self.TableName}"
+
+        # add the where clause(s)
+        if len(self._filters) > 0:
+            # add the intial where
+            query += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
+
+            # add additional clauses if needed
+            if len(self._filters) > 1:
+                for f in self._filters:
+                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                # end for filters
+            # end if len > 1
+        # end if len > 0
+
+        # execute the query
+        print(query)
+        cur = self.__client.execute(query)
+
+        # marshall the results and return the rows
+        return cur.fetchall()
+
+
+class MapTable(Table):
+    """
+    A map table takes two tables and sets a relationship between the two.   
+    """
+
+    # Select A.Cols, B.Cols from A,B,M where A.ndx = M.a and M.b = B.ndx
+
+    def __init__(self, primary: Table, secondary: Table, primaryCol: str = "PrimaryKey", secondaryCol: str = "PrimaryKey"):
+        pass
+

@@ -41,5 +41,3 @@ def test_Float_Validator(headers):
     assert not c.Validate(1), 'Failed to validate 1'
     assert not c.Validate('one'), 'Incorrectly validated \"one\"'
 
-
-

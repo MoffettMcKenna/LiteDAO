@@ -55,14 +55,28 @@ def buildDBFile():
 
         # bday format -> YYYY-MM-DD
 
-        insert = 'Insert into Person (fname, lname, nickname, birthday) values (?, ?, ?, ?)'
-        cur.execute(insert, ('Joe', 'Smith', 'daddy', '1911-11-11'))
-        cur.execute(insert, ('June', 'Smith', 'Mommy', '2222-02-22'))
-        cur.execute(insert, ('Jack', 'Smith', None, '2001-10-01'))
-        cur.execute(insert, ('Jill', 'Smith', None, '2011-04-11'))
-        cur.execute(insert, ('Joanna', 'Dane', 'Mimi', '2019-12-13'))
-        cur.execute(insert, ('John', 'Doe', 'Pops', '1909-03-10'))
-        cur.execute(insert, ('Jane', 'Doe', 'Grams', '1024-01-28'))
+        insperson = 'Insert into Person (fname, lname, nickname, birthday) values (?, ?, ?, ?)'
+        cur.execute(insperson, ('Joe', 'Smith', 'daddy', '1911-11-11'))
+        cur.execute(insperson, ('June', 'Smith', 'Mommy', '2222-02-22'))
+        cur.execute(insperson, ('Jack', 'Smith', None, '2001-10-01'))
+        cur.execute(insperson, ('Jill', 'Smith', None, '2011-04-11'))
+        cur.execute(insperson, ('Joanna', 'Dane', 'Mimi', '2019-12-13'))
+        cur.execute(insperson, ('John', 'Doe', 'Pops', '1909-03-10'))
+        cur.execute(insperson, ('Jane', 'Doe', 'Grams', '1024-01-28'))
+
+        cur.execute("""Create table Wallet(
+                        id integer primary key, 
+                        personid integer, 
+                        amount real, 
+                        lastTransdate string
+                    );""")
+
+        inswallet = 'insert into Wallet(personid, amount, lastTransDate) values (?, ?, ?)'
+        cur.execute(inswallet, (1, 100.00, '2021-12-22'))
+        cur.execute(inswallet, (2, 654.85, '3032-03-10'))
+        cur.execute(inswallet, (6, 1010.12, '1808-08-09'))
+
+
 
         con.commit()
         con.close()
