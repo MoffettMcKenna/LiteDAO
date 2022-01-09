@@ -8,7 +8,7 @@ from src.Tables import Table
 from src.Tables import ComparisonOps
 import src.Errors
 
-test_db_version = 1
+test_db_version = 2
 
 
 @pytest.fixture
@@ -75,8 +75,6 @@ def buildDBFile():
         cur.execute(inswallet, (1, 100.00, '2021-12-22'))
         cur.execute(inswallet, (2, 654.85, '3032-03-10'))
         cur.execute(inswallet, (6, 1010.12, '1808-08-09'))
-
-
 
         con.commit()
         con.close()

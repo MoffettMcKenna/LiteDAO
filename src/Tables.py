@@ -132,12 +132,14 @@ class Table:
 
     # region 'Constants'
 
-    # Expected label names from the pragma read
+    # Expected label names from the pragma read in the __init__
     __LBLNAME = 'name'  # name of the column
     __LBLTYPE = 'type'  # data type of the column
     __LBLDFT = 'dflt_value'  # default value of the column
     __LBLPK = 'pk'  # primary key flag
     __LBLNN = 'notnull'  # notnull/nullable flag
+
+    __SELECT = "Select {0} From {1}"
 
     #endregion
 
@@ -223,7 +225,7 @@ class Table:
 
         # build the query - start with the basic select portion
         # initialize the select statement
-        query = f"Select {str.join(', ', columns)} From {self.TableName}"
+        query = self.__SELECT.format(str.join(', ', columns), self.TableName)
 
         # add the where clause(s)
         if len(self._filters) > 0:
@@ -481,39 +483,34 @@ class JoinedTable (Table):
     """
     A joined table is a left (primary) and right (secondary) table where the left table is extended with the columns
     from the right table based on common values in specific columns.  In classic DB speak this is a left join with
-    the all the entries from the primary table present but only the matching entries from the secondary table.
+    the all the entries from the primary table present but only the matching entries from the secondary table.  The
+    write commands ....
     """
 
-    # Select A.Cols, B.Cols from A,B where A.ndx = B.a
+    # Select A.Cols, B.Cols from A left join B on A.ndx = B.a [where ....]
 
     def __init__(self, primary: Table, secondary: Table, primaryCol: str, secondaryCol: str):
         self.DB = primary.DB
-        self.TableName = primary.TableName + "-" + secondary.TableName
-
-        # grab the data
-        self.__client = sqlite3.connect(self.DB)
-        cq = self.__client.execute("pragma table_info({0})".format(self.TableName))
+        self.TableName = primary.TableName
+        self._rightTable = secondary.TableName
+        self._leftcol = primaryCol
+        self._rightcol = secondaryCol
 
         # init the columns dictionary and primary keys list
         self._columns = {}  # this will hold _Column objects indexed by name
         self._pks = []  # a list of the names of primary keys
         self._filters = []  # where clauses
 
-        # clabels are the pragma field names for the column meta data
-        self._clabels = [x[0] for x in cq.description]
+        for table in [primary, secondary]:
+            # grab all the columns in the table
+            for col in table._columns:
+                # copy the column into our set
+                self._columns[f"{table.TableName}.{col.Name}"] = col
 
-        # move the data into the dictionary
-        for col in cq.fetchall():
-            name = col[self._clabels.index(self.__LBLNAME)]
-
-            # save the name of the column by the index of the key
-            self._columns[name] = Column(pragma=col, headers=self._clabels)
-
-            # test for pk status
-            if self._columns[name].PrimaryKey:
-                # if this is a primary key save it in that list
-                self._pks.append(name)
-        # end for col
+                if col.PrimaryKey:
+                    self._pks.append(col.Name)
+            # end for col
+        #end for table
 
     # end __init__()
 
@@ -534,7 +531,7 @@ class JoinedTable (Table):
 
         # build the query - start with the basic select portion
         # initialize the select statement
-        query = f"Select {str.join(', ', columns)} From {self.TableName}"
+        query = f"Left Join {self._rightTable} on {self.TableName}.{self._leftcol} = {self._rightTable}.{self._rightcol}"
 
         # add the where clause(s)
         if len(self._filters) > 0:
