@@ -139,8 +139,6 @@ class Table:
     __LBLPK = 'pk'  # primary key flag
     __LBLNN = 'notnull'  # notnull/nullable flag
 
-    __SELECT = "Select {0} From {1}"
-
     #endregion
 
     def __init__(self, name: str, dbfile: str):
@@ -225,7 +223,7 @@ class Table:
 
         # build the query - start with the basic select portion
         # initialize the select statement
-        query = self.__SELECT.format(str.join(', ', columns), self.TableName)
+        query = f"Select {str.join(', ', columns)} From {self.TableName}"
 
         # add the where clause(s)
         if len(self._filters) > 0:
@@ -496,6 +494,9 @@ class JoinedTable (Table):
         self._leftcol = primaryCol
         self._rightcol = secondaryCol
 
+        # grab the client
+        self.__client = sqlite3.connect(self.DB)
+
         # init the columns dictionary and primary keys list
         self._columns = {}  # this will hold _Column objects indexed by name
         self._pks = []  # a list of the names of primary keys
@@ -504,24 +505,40 @@ class JoinedTable (Table):
         for table in [primary, secondary]:
             # grab all the columns in the table
             for col in table._columns:
-                # copy the column into our set
-                self._columns[f"{table.TableName}.{col.Name}"] = col
 
-                if col.PrimaryKey:
-                    self._pks.append(col.Name)
+                #TODO add option to override this
+                # if this is the one of the join keys skip it, keep things clean
+                if f"{table.TableName}.{col}" == f"{self.TableName}.{self._leftcol}":
+                    continue
+                if f"{table.TableName}.{col}" == f"{self._rightTable}.{self._rightcol}":
+                    continue
+
+                # copy the column into our set
+                self._columns[f"{table.TableName}.{col}"] = col
+
+                if table._columns[col].PrimaryKey:
+                    self._pks.append(f"{table.TableName}.{col}")
             # end for col
         #end for table
-
     # end __init__()
+
+    def GetAll(self) -> list:
+        """
+        Performs a get for all the columns in the table.  Any filters set still apply to the results.
+        :return: The results.
+        """
+        #TODO add flag for include primary keys or not - default false
+        return self.Get(list(self._columns.keys()))
 
     def Get(self, columns: list) -> list:
         """
         Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
         returned.
 
-        :param columns: A list of the column names to select.
+        :param columns: A list of the column names to select.  Every needs to be in the form TableName.ColumnName.
         :return:
         """
+        #TODO if there is no tablename in the column entry then test if it's in the primary????
 
         # sanity check the columns
         for c in columns:
@@ -530,8 +547,10 @@ class JoinedTable (Table):
         # end for c
 
         # build the query - start with the basic select portion
-        # initialize the select statement
-        query = f"Left Join {self._rightTable} on {self.TableName}.{self._leftcol} = {self._rightTable}.{self._rightcol}"
+        # initialize the select statement with the left join
+        query = f"Select {str.join(', ', columns)} From {self.TableName}"
+        query += f" Left Join {self._rightTable}"
+        query += f" on {self.TableName}.{self._leftcol} = {self._rightTable}.{self._rightcol}"
 
         # add the where clause(s)
         if len(self._filters) > 0:
