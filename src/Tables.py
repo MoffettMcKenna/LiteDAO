@@ -514,7 +514,7 @@ class JoinedTable (Table):
                     continue
 
                 # copy the column into our set
-                self._columns[f"{table.TableName}.{col}"] = col
+                self._columns[f"{table.TableName}.{col}"] = table._columns[col]
 
                 if table._columns[col].PrimaryKey:
                     self._pks.append(f"{table.TableName}.{col}")

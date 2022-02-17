@@ -5,6 +5,7 @@ from DBManager import *
 
 sys.path.insert(1, "../")
 from src.Tables import JoinedTable, Table
+from src.Tables import ComparisonOps
 import src.Errors
 
 
@@ -139,5 +140,75 @@ def test_Get_DNE_Column(buildDBFile):
     with pytest.raises(src.Errors.ImaginaryColumn):
         data = t.Get(["id, name, lname"])
 
+
+# endregion
+
+
+# region Filter Tests
+
+def test_Filter_Null_Nickname(buildDBFile):
+    per = Table("Person", buildDBFile)
+    bifold = Table("Wallet", buildDBFile)
+
+    jt = JoinedTable(per, bifold, "id", "personid")
+
+    jt.Filter("Person.nickname", ComparisonOps.IS, None)
+    data = jt.GetAll()
+
+    assert len(data) == 2
+    assert data[0][1] == "Jack"
+    assert data[0][2] == "Smith"
+    assert data[0][3] is None
+
+    assert data[1][1] == "Jill"
+    assert data[1][2] == "Smith"
+    assert data[1][3] is None
+
+    t.ClearFilters()
+
+
+def test_Filter_LastName(buildDBFile):
+    t = Table("Person", buildDBFile)
+    t.Filter("lname", ComparisonOps.IS, 'Doe')
+    data = t.GetAll()
+
+    assert len(data) == 2
+    assert data[0][1] == "John"
+    assert data[0][2] == "Doe"
+    assert data[0][3] == "Pops"
+    assert data[0][4] == "1909-03-10"
+
+    assert data[1][1] == "Jane"
+    assert data[1][2] == "Doe"
+    assert data[1][3] == "Grams"
+    assert data[1][4] == "1024-01-28"
+
+    t.ClearFilters()
+
+
+def test_ClearFilters(buildDBFile):
+    t = Table("Person", buildDBFile)
+    t.Filter("nickname", ComparisonOps.IS, None)
+    data = t.GetAll()
+
+    assert len(data) == 2
+
+    t.ClearFilters()
+
+    data = t.GetAll()
+    assert len(data) == 7
+
+
+def test_Filter_InvalidValue(buildDBFile):
+    t = Table("Person", buildDBFile)
+
+    with pytest.raises(src.Errors.InvalidColumnValue):
+        t.Filter("id", ComparisonOps.IS, '20')
+
+    with pytest.raises(src.Errors.InvalidColumnValue):
+        t.Filter("nickname", ComparisonOps.IS, 20)
+
+    # just to be safe
+    t.ClearFilters()
 
 # endregion
