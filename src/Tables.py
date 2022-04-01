@@ -172,11 +172,65 @@ class Table:
     # end __init__()
 
     # region Private Helpers
+    # These functions are available for inheriting classes to override, to change the behavoir across multiple calls
+    # within the API.
+
+    def _hook_CheckColumn(col: str):
+        if col not in self._columns.keys():
+            raise ImaginaryColumn(self.TableName, c)
+
+    def _hook_ValidateColumn(name: str, value: typing.Any):
+        if not self._columns[name].Validate(value):
+            raise InvalidColumnValue(self.TableName, name, value)
+
+    def _hook_ApplyFilters(query: str) -> str:
+        # no filters, no work to do
+        if len(self._filters):
+            # Go ahead and add the first filter outside the loop, so we only need to
+            # do the check for existing where statement once - this is a possible
+            # performance improvement (not big, but still....)
+
+            # check for a where clause already in the statement
+            if query.lower().find('where') > 0:
+                # add an and to bridge the clauses
+                query += ' and '
+            else:
+                # ok, this is the start of the where clause
+                query += ' Where '
+
+            # attach the first filter
+            query += f'{self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}'
+
+            # add additional clauses if needed
+            if len(self._filters) > 1:
+                for f in self._filters[1:]:
+                    # now append the actual clause
+                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                # end for filters
+            # end if len > 1
+        # end if len
+
+        return query
+
+    def _hook_InLineFilter(query: str, name: str, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any) -> str:
+        # if there is an operator we have an in-line filter
+        if operator != ComparisonOps.Noop:
+            # raises an error if the column name is invalid
+            _hook_CheckColumn(name)
+
+            # TODO verify the operation is valid for the column type => _hook_VerifyOp
+
+            # raises an error if the value is invalid for the column
+            _hook_ValidateColumn(name, value)
+
+            # add the where clause
+            query += f" Where {self._buildWhere(name, operator, val)}"
+
+        return query
+
 
     # helper to make sure the value is formatted properly for the column
     def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
-
-        # build the clause
         if self._columns[column].ColumnType == 'text' and val != 'null':
             return f"{column} {op.AsStr()} '{val}' "
         else:
@@ -217,26 +271,15 @@ class Table:
 
         # sanity check the columns
         for c in columns:
-            if c not in self._columns.keys():
-                raise ImaginaryColumn(self.TableName, c)
+            self._hook_CheckColumn(c)
         # end for c
 
         # build the query - start with the basic select portion
         # initialize the select statement
         query = f"Select {str.join(', ', columns)} From {self.TableName}"
 
-        # add the where clause(s)
-        if len(self._filters) > 0:
-            # add the intial where
-            query += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
-
-            # add additional clauses if needed
-            if len(self._filters) > 1:
-                for f in self._filters:
-                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
-                # end for filters
-            # end if len > 1
-        # end if len > 0
+        # get all the filters into where clauses
+        query = self._hook_ApplyFilters(query)
 
         # execute the query
         print(query)
@@ -251,14 +294,16 @@ class Table:
         :param values: A map of the column names and values.  Any missing values will be filled in with the default value (except primary keys).
         """
 
-        cols = list(self._columns.keys())
+        cols = list(self._columns.keys()) # these will be the ones which get default values
         vals = {}
 
         # grab the values from the parameter
         for k in values.keys():
+            ### _hook_CheckColumns
             if k not in self._columns.keys():
                 raise ImaginaryColumn(self.TableName, k)
 
+            # remove the column as needing a default
             cols.remove(k)
             # do not add in primary keys
             if k not in self._pks:
@@ -295,10 +340,12 @@ class Table:
         # TODO make the where clause a list of tuples or actual where objects?
 
         # verify the column
+        ### _hook_CheckColumn
         if name not in self._columns.keys():
             raise ImaginaryColumn(self.TableName, name)
 
         # verify the value is legal
+        ### _hook_ValidateColumn
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
@@ -309,6 +356,7 @@ class Table:
         else:
             update = f'Update {self.TableName} set {name} = {value}'
 
+        ### _hook_InLineFilter
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
 
@@ -325,6 +373,7 @@ class Table:
             # add the where clause
             update += f" Where {self._buildWhere(compname, operator, compval)}"
 
+        ### _hook_ApplyFilters
         # if in-line filter not added, then grab the current filters
         elif len(self._filters) > 0:
 
@@ -364,6 +413,7 @@ class Table:
         # start the delete statement
         delete = f'Delete from {self.TableName}'
 
+        ### _hook_InLineFilter
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
 
@@ -385,7 +435,7 @@ class Table:
 
             # check for a where clause already in the delete statement
             if delete.lower().find('where') > 0:
-                # add an and to bridge the clauses
+                # add an and to bridge the cla uses
                 delete += 'and'
             else:
                 delete += ' Where'
@@ -422,12 +472,14 @@ class Table:
         """
 
         # verify the column
+        ### _hook_CheckColumn
         if name not in self._columns.keys():
             raise ImaginaryColumn(self.TableName, name)
 
         # TODO verify the operation is valid for the column type
 
         # verify the value is the correct type
+        ### _hook_ValidateColumn
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
@@ -455,6 +507,7 @@ class Table:
         :param checker: The new validation function.
         """
         # verify the column
+        ### _hook_CheckColumn
         if name not in self._columns.keys():
             raise ImaginaryColumn(self.TableName, name)
 
@@ -465,6 +518,7 @@ class Table:
         Changes the value of the default value for the given column.
         """
         # verify the column
+        ### _hook_CheckColumn
         if name not in self._columns.keys():
             raise ImaginaryColumn(self.TableName, name)
 
@@ -483,6 +537,10 @@ class JoinedTable (Table):
     from the right table based on common values in specific columns.  In classic DB speak this is a left join with
     the all the entries from the primary table present but only the matching entries from the secondary table.  The
     write commands ....
+
+    When performing actions which might change the data it will only allow for changes to the primary table as multiple
+    entries might map to the secondary from the primary (ie - the primary is people and the secondary are addresses, two
+    people might share one).
     """
 
     # Select A.Cols, B.Cols from A left join B on A.ndx = B.a [where ....]
