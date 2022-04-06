@@ -290,7 +290,7 @@ def test_Add_InvalidColumn(buildDBFile):
 
 # region Delete Tests
 
-def test_DeleteOne(buildDBFile):
+def test_DeleteOne(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # confirm the expected number of entries
@@ -307,12 +307,8 @@ def test_DeleteOne(buildDBFile):
     # ensure only one was deleted
     assert len(data1) == len(data2) + 1
 
-    # nuke the db version number so it gets reset for the next test
-    v = Table('version', buildDBFile)
-    v.UpdateValue('version', 0)
 
-
-def test_DeleteMultiple(buildDBFile):
+def test_DeleteMultiple(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # confirm the expected number of entries
@@ -329,12 +325,8 @@ def test_DeleteMultiple(buildDBFile):
     # ensure only one was deleted
     assert len(data1) == len(data2) + 2
 
-    # nuke the db version number so it gets reset for the next test
-    v = Table('version', buildDBFile)
-    v.UpdateValue('version', 0)
 
-
-def test_Delete_ClassFilter(buildDBFile):
+def test_Delete_ClassFilter(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # confirm the expected number of entries
@@ -357,12 +349,8 @@ def test_Delete_ClassFilter(buildDBFile):
     # ensure only one was deleted
     assert len(data1) == len(data2) + 4
 
-    # nuke the db version number so it gets reset for the next test
-    v = Table('version', buildDBFile)
-    v.UpdateValue('version', 0)
 
-
-def test_Delete_BadColumn(buildDBFile):
+def test_Delete_BadColumn(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # confirm the expected number of entries
@@ -378,7 +366,7 @@ def test_Delete_BadColumn(buildDBFile):
     assert len(data2) == len(data1)
 
 
-def test_Delete_BadFilterValue(buildDBFile):
+def test_Delete_BadFilterValue(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # confirm the expected number of entries
@@ -395,7 +383,7 @@ def test_Delete_BadFilterValue(buildDBFile):
 
 
 # test running with both inline and class filters
-def test_Delete_DualFilterType(buildDBFile):
+def test_Delete_DualFilterType(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # set the filter
@@ -446,16 +434,12 @@ def test_Delete_DualFilterType(buildDBFile):
     assert data2[5][3] == "Grams"
     assert data2[5][4] == '1024-01-28'
 
-    # nuke the db version number so it gets reset for the next test
-    v = Table('version', buildDBFile)
-    v.UpdateValue('version', 0)
-
 
 # endregion
 
 # region Update Tests
 
-def test_UpdateOne(buildDBFile):
+def test_UpdateOne(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # perform the operation under test
@@ -502,12 +486,8 @@ def test_UpdateOne(buildDBFile):
     assert data[6][3] == "Grams"
     assert data[6][4] == '1024-01-28'
 
-    # trash the version to get the db rebuilt on next run
-    t2 = Table("Version", buildDBFile)
-    t2.UpdateValue("version", 0)
 
-
-def test_UpdateMultiple(buildDBFile):
+def test_UpdateMultiple(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     # perform the operation under test
@@ -553,12 +533,8 @@ def test_UpdateMultiple(buildDBFile):
     assert data[6][3] == "Test"
     assert data[6][4] == '1024-01-28'
 
-    # trash the version to get the db rebuilt on next run
-    t2 = Table("Version", buildDBFile)
-    t2.UpdateValue("version", 0)
 
-
-def test_Update_PresetFilter(buildDBFile):
+def test_Update_PresetFilter(buildDBFile, dirtyDB):
     t = Table("Person", buildDBFile)
 
     t.Filter('lname', ComparisonOps.IS, 'Doe')
@@ -580,10 +556,6 @@ def test_Update_PresetFilter(buildDBFile):
     assert data[1][2] == "Doe"
     assert data[1][3] == "Test"
     assert data[1][4] == '1024-01-28'
-
-    # trash the version to get the db rebuilt on next run
-    t2 = Table("Version", buildDBFile)
-    t2.UpdateValue("version", 0)
 
 
 def test_Update_BadUpdateColumn(buildDBFile):

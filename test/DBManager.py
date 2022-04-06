@@ -75,3 +75,17 @@ def buildDBFile():
         con.close()
 
     return 'test.db'
+
+@pytest.fixture
+def dirtyDB():
+    yield
+    con = sqlite3.connect('./test.db')
+    try:
+        cur = con.cursor()
+        cur.execute('update Version set version = 0')
+        con.commit()
+    except (sqlite3.OperationalError, IndexError):
+        # if the tables is DNE, we have the wrong db, set create
+        create = True
+    finally:
+        con.close()

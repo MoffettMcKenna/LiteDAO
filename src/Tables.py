@@ -175,15 +175,17 @@ class Table:
     # These functions are available for inheriting classes to override, to change the behavoir across multiple calls
     # within the API.
 
-    def _hook_CheckColumn(col: str):
+    def _hook_CheckColumn(self, col: str):
         if col not in self._columns.keys():
-            raise ImaginaryColumn(self.TableName, c)
+            raise ImaginaryColumn(self.TableName, col)
 
-    def _hook_ValidateColumn(name: str, value: typing.Any):
+
+    def _hook_ValidateColumn(self, name: str, value: typing.Any):
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
-    def _hook_ApplyFilters(query: str) -> str:
+
+    def _hook_ApplyFilters(self, query: str) -> str:
         # no filters, no work to do
         if len(self._filters):
             # Go ahead and add the first filter outside the loop, so we only need to
@@ -212,19 +214,18 @@ class Table:
 
         return query
 
-    def _hook_InLineFilter(query: str, name: str, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any) -> str:
-        # if there is an operator we have an in-line filter
-        if operator != ComparisonOps.Noop:
-            # raises an error if the column name is invalid
-            _hook_CheckColumn(name)
 
-            # TODO verify the operation is valid for the column type => _hook_VerifyOp
+    def _hook_InLineFilter(self, query: str, name: str, operator: ComparisonOps, value: typing.Any) -> str:
+        # raises an error if the column name is invalid
+        self._hook_CheckColumn(name)
 
-            # raises an error if the value is invalid for the column
-            _hook_ValidateColumn(name, value)
+        # TODO verify the operation is valid for the column type => _hook_VerifyOp
 
-            # add the where clause
-            query += f" Where {self._buildWhere(name, operator, val)}"
+        # raises an error if the value is invalid for the column
+        self._hook_ValidateColumn(name, value)
+
+        # add the where clause
+        query += f" Where {self._buildWhere(name, operator, value)}"
 
         return query
 
@@ -299,9 +300,7 @@ class Table:
 
         # grab the values from the parameter
         for k in values.keys():
-            ### _hook_CheckColumns
-            if k not in self._columns.keys():
-                raise ImaginaryColumn(self.TableName, k)
+            self._hook_CheckColumn(k)
 
             # remove the column as needing a default
             cols.remove(k)
@@ -340,14 +339,10 @@ class Table:
         # TODO make the where clause a list of tuples or actual where objects?
 
         # verify the column
-        ### _hook_CheckColumn
-        if name not in self._columns.keys():
-            raise ImaginaryColumn(self.TableName, name)
+        self._hook_CheckColumn(name)
 
         # verify the value is legal
-        ### _hook_ValidateColumn
-        if not self._columns[name].Validate(value):
-            raise InvalidColumnValue(self.TableName, name, value)
+        self._hook_ValidateColumn(name, value)
 
         # create the base update statement
         # make sure to wrap text values in ""
@@ -356,37 +351,13 @@ class Table:
         else:
             update = f'Update {self.TableName} set {name} = {value}'
 
-        ### _hook_InLineFilter
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
+            update = self._hook_InLineFilter(update, compname, operator, compval)
 
-            # verify we're filtering based on a legitmate column
-            if compname not in self._columns.keys():
-                raise ImaginaryColumn(self.TableName, compname)
-
-            # TODO verify the operation is valid for the column type
-
-            # verify the value validates
-            if not self._columns[compname].Validate(compval):
-                raise InvalidColumnValue(self.TableName, compname, compval)
-
-            # add the where clause
-            update += f" Where {self._buildWhere(compname, operator, compval)}"
-
-        ### _hook_ApplyFilters
-        # if in-line filter not added, then grab the current filters
-        elif len(self._filters) > 0:
-
-            # add the intial where
-            update += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
-
-            # add additional clauses if needed
-            if len(self._filters) > 1:
-                for f in self._filters:
-                    update += f' and {self._buildWhere(f.column, f.operator, f.value)}'
-                # end for filters
-            # end if len > 1
-        # end if len > 0
+        # nothing inline, use the filters
+        else:
+            update = self._hook_ApplyFilters(update)
 
         # perform the action
         cur = self.__client.cursor()
@@ -413,43 +384,13 @@ class Table:
         # start the delete statement
         delete = f'Delete from {self.TableName}'
 
-        ### _hook_InLineFilter
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
+            delete = self._hook_InLineFilter(delete, name, operator, val)
 
-            # verify we're filtering based on a legitmate column
-            if name not in self._columns.keys():
-                raise ImaginaryColumn(self.TableName, name)
-
-            # TODO verify the operation is valid for the column type
-
-            # verify the value validates
-            if not self._columns[name].Validate(value):
-                raise InvalidColumnValue(self.TableName, name, value)
-
-            # add the where clause
-            delete += f" Where {self._buildWhere(name, operator, val)}"
-
-        # check for class filters - makes this more dangerous, but gives more power to user
-        if len(self._filters) > 0:
-
-            # check for a where clause already in the delete statement
-            if delete.lower().find('where') > 0:
-                # add an and to bridge the cla uses
-                delete += 'and'
-            else:
-                delete += ' Where'
-
-            # add the first where from class filters
-            delete += f" {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
-
-            # add additional clauses if needed
-            if len(self._filters) > 1:
-                for f in self._filters:
-                    delete += f'and {self._buildWhere(f.column, f.operator, f.value)}'
-                # end for filters
-            # end if len > 1
-        # end if len > 0
+        # nothing inline, use the filters
+        else:
+            delete = self._hook_ApplyFilters(delete)
 
         # perform the action
         cur = self.__client.cursor()
@@ -479,9 +420,7 @@ class Table:
         # TODO verify the operation is valid for the column type
 
         # verify the value is the correct type
-        ### _hook_ValidateColumn
-        if not self._columns[name].Validate(value):
-            raise InvalidColumnValue(self.TableName, name, value)
+        self._hook_ValidateColumn(name, value)
 
         if value is None:
             val = 'null'
