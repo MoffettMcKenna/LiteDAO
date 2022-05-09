@@ -146,8 +146,8 @@ def test_ClearFilters(buildDBFile):
 
     t.ClearFilters()
 
-    data = t.GetAll()
-    assert len(data) == 7
+    data2 = t.GetAll()
+    assert len(data2) == 7
 
 
 def test_Filter_InvalidValue(buildDBFile):

@@ -13,6 +13,7 @@ from src.Errors import *
 #   * make thread/process safe with lock/flag file (location configurable)
 # TODO check for errors raised on add - re-add value with unique on column?
 # TODO allow for comparison values in the filtering conditions to be other columns, or columns from other tables.
+# TODO switch to using prepared statements inside a query caching mechanism which would only need a new set of params
 
 @dataclass()
 class Column:
@@ -179,13 +180,11 @@ class Table:
         if col not in self._columns.keys():
             raise ImaginaryColumn(self.TableName, col)
 
-
     def _hook_ValidateColumn(self, name: str, value: typing.Any):
         if not self._columns[name].Validate(value):
             raise InvalidColumnValue(self.TableName, name, value)
 
-
-    def _hook_ApplyFilters(self, query: str) -> str:
+    def _hook_ApplyFilters(self, query: str, params: list) -> (str, list):
         # no filters, no work to do
         if len(self._filters):
             # Go ahead and add the first filter outside the loop, so we only need to
@@ -193,6 +192,8 @@ class Table:
             # performance improvement (not big, but still....)
 
             # check for a where clause already in the statement
+            # not applicable now, but one day there might be an use case for function(s) with inline and
+            # also the class filters
             if query.lower().find('where') > 0:
                 # add an and to bridge the clauses
                 query += ' and '
@@ -200,22 +201,25 @@ class Table:
                 # ok, this is the start of the where clause
                 query += ' Where '
 
-            # attach the first filter
-            query += f'{self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}'
+            # attach the first filter - outside loop because no and is needed
+            # query += f'{self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}'
+            query += f'{self._filters[0].column} {self._filters[0].operator.AsStr()} ?'
+            params.append(self._filters[0].value)
 
             # add additional clauses if needed
             if len(self._filters) > 1:
                 for f in self._filters[1:]:
                     # now append the actual clause
-                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                    # query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
+                    query += f' and {f.column} {f.operator.AsStr()} ?'
+                    params.append(f.value)
                 # end for filters
             # end if len > 1
         # end if len
 
-        return query
+        return query, params
 
-
-    def _hook_InLineFilter(self, query: str, name: str, operator: ComparisonOps, value: typing.Any) -> str:
+    def _hook_InLineFilter(self, query: str, params: list, name: str, operator: ComparisonOps, value: typing.Any) -> (str, list):
         # raises an error if the column name is invalid
         self._hook_CheckColumn(name)
 
@@ -225,10 +229,20 @@ class Table:
         self._hook_ValidateColumn(name, value)
 
         # add the where clause
-        query += f" Where {self._buildWhere(name, operator, value)}"
+        query += f' Where {name} {operator.AsStr()} ?'
+        params.append(value)
 
-        return query
+        return query, params
 
+    def _hook_BuildBaseQuery(self, operation: str, columns: list = []):
+        # TODO need to evaluate performance here - if can make lazy then fine, otherwise replace
+        queries = {
+            'select': f"Select {str.join(', ', columns)} From {self.TableName}",
+            'insert': f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})",
+            'delete': f'Delete from {self.TableName}',
+            'update': f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
+        }
+        return queries[operation.lower()]
 
     # helper to make sure the value is formatted properly for the column
     def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
@@ -270,21 +284,21 @@ class Table:
         :return:
         """
 
+        params = []  # this will be the second arg with the order parameters into the query
+
         # sanity check the columns
         for c in columns:
             self._hook_CheckColumn(c)
         # end for c
 
-        # build the query - start with the basic select portion
         # initialize the select statement
-        query = f"Select {str.join(', ', columns)} From {self.TableName}"
+        query = self._hook_BuildBaseQuery('select', columns)
 
         # get all the filters into where clauses
-        query = self._hook_ApplyFilters(query)
+        query, params = self._hook_ApplyFilters(query, params)
 
         # execute the query
-        print(query)
-        cur = self.__client.execute(query)
+        cur = self.__client.execute(query, params)
 
         # marshall the results and return the rows
         return cur.fetchall()
@@ -314,14 +328,13 @@ class Table:
             if c not in self._pks:
                 vals[c] = self._columns[c].Default
 
-        mediator = "\',\'"
-
         # with all the
-        insert = f"Insert into {self.TableName}({str.join(',', list(vals.keys()))}) values ('{str.join(mediator, list(vals.values()))}')"
+        insert = self._hook_BuildBaseQuery('insert', vals.keys())
+        params = list(vals.values())  # this will be the second arg with the order parameters into the query
 
         # perform the action
         cur = self.__client.cursor()
-        cur.execute(insert)
+        cur.execute(insert, params)
         self.__client.commit()
 
     def UpdateValue(self, name: str, value: typing.Any, compname: str = '', operator: ComparisonOps = ComparisonOps.Noop
@@ -338,6 +351,8 @@ class Table:
         """
         # TODO make the where clause a list of tuples or actual where objects?
 
+        params = list(value)  # this will be the second arg with the order parameters into the query
+
         # verify the column
         self._hook_CheckColumn(name)
 
@@ -346,22 +361,19 @@ class Table:
 
         # create the base update statement
         # make sure to wrap text values in ""
-        if self._columns[name].ColumnType == 'text' and value != 'null':
-            update = f'Update {self.TableName} set {name} = "{value}"'
-        else:
-            update = f'Update {self.TableName} set {name} = {value}'
+        update = self._hook_BuildBaseQuery('update', list(name))
 
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
-            update = self._hook_InLineFilter(update, compname, operator, compval)
+            update, params = self._hook_InLineFilter(update, params, compname, operator, compval)
 
         # nothing inline, use the filters
         else:
-            update = self._hook_ApplyFilters(update)
+            update, params = self._hook_ApplyFilters(update, params)
 
         # perform the action
         cur = self.__client.cursor()
-        cur.execute(update)
+        cur.execute(update, params)
         self.__client.commit()
 
     def Delete(self, name: str = None, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any = None):
@@ -375,27 +387,31 @@ class Table:
         """
         # TODO make the where clause a list of tuples or actual where objects?
 
+        params = []  # this will be the second arg with the order parameters into the query
+
+        # This is probably not needed since testing shows param'd queries accept None
         # convert None to null
-        if value is None:
-            val = 'null'
-        else:
-            val = value
+#        if value is None:
+#            val = 'null'
+#        else:
+#            val = value
 
         # start the delete statement
-        delete = f'Delete from {self.TableName}'
+        delete = self._hook_BuildBaseQuery('delete')
 
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
-            delete = self._hook_InLineFilter(delete, name, operator, val)
+#            delete, params = self._hook_InLineFilter(delete, params, name, operator, val)
+            delete, params = self._hook_InLineFilter(delete, params, name, operator, value)
 
         # nothing inline, use the filters
         else:
-            delete = self._hook_ApplyFilters(delete)
+            delete, params = self._hook_ApplyFilters(delete, params)
 
         # perform the action
         cur = self.__client.cursor()
         try:
-            cur.execute(delete)
+            cur.execute(delete, params)
             self.__client.commit()
         except sqlite3.OperationalError:
             print(delete)
@@ -422,13 +438,15 @@ class Table:
         # verify the value is the correct type
         self._hook_ValidateColumn(name, value)
 
-        if value is None:
-            val = 'null'
-        else:
-            val = value
+        # Don't think we need this - tested with param'd queries and None is accepted in several cases
+#        if value is None:
+#            val = 'null'
+#        else:
+#            val = value
 
         # build the data instance
-        clause = Where(column=name, operator=operator, value=val)
+#        clause = Where(column=name, operator=operator, value=val)
+        clause = Where(column=name, operator=operator, value=value)
 
         # add the filter
         self._filters.append(clause)
