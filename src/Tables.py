@@ -236,13 +236,35 @@ class Table:
 
     def _hook_BuildBaseQuery(self, operation: str, columns: list = []):
         # TODO need to evaluate performance here - if can make lazy then fine, otherwise replace
-        queries = {
-            'select': f"Select {str.join(', ', columns)} From {self.TableName}",
-            'insert': f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})",
-            'delete': f'Delete from {self.TableName}',
-            'update': f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
-        }
-        return queries[operation.lower()]
+        # queries = {
+        #     'select': f"Select {str.join(', ', columns)} From {self.TableName}",
+        #     'insert': f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})",
+        #     'delete': f'Delete from {self.TableName}',
+        #     'update': f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
+        # }
+        # return queries[operation.lower()]
+        if operation.lower() == 'select':
+            return f"Select {str.join(', ', columns)} From {self.TableName}"
+        elif operation.lower() == 'insert':
+            if len(columns) == 1:
+                return f"Insert into {self.TableName}({columns[0]}) values (?)"
+            elif len(columns) == 0:
+                raise Exception() #TODO replace with custom error for empty column list
+            else:
+                return f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})"
+        #end if insert
+        elif operation.lower() == 'delete':
+            return f"Delete from {self.TableName}"
+        elif operation.lower() == 'update':
+            if len(columns) == 1:
+                return f"Update {self.TableName} set {columns[0] + ' = ?'}"
+            elif len(columns) == 0:
+                raise Exception() #TODO replace with custom error for empty column list
+            else:
+                return f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
+        else:
+            raise Exception() #TODO replace with custom error for invalid db operation
+
 
     # helper to make sure the value is formatted properly for the column
     def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
@@ -292,7 +314,7 @@ class Table:
         # end for c
 
         # initialize the select statement
-        query = self._hook_BuildBaseQuery('select', columns)
+        query = self._hook_BuildBaseQuery('select', columns)  # returning each letter in column name as a column....
 
         # get all the filters into where clauses
         query, params = self._hook_ApplyFilters(query, params)
@@ -351,7 +373,7 @@ class Table:
         """
         # TODO make the where clause a list of tuples or actual where objects?
 
-        params = list(value)  # this will be the second arg with the order parameters into the query
+        params = [value]  # this will be the second arg with the order parameters into the query
 
         # verify the column
         self._hook_CheckColumn(name)
@@ -361,7 +383,7 @@ class Table:
 
         # create the base update statement
         # make sure to wrap text values in ""
-        update = self._hook_BuildBaseQuery('update', list(name))
+        update = self._hook_BuildBaseQuery('update', [name])
 
         # if there is an operator we have an in-line filter
         if operator != ComparisonOps.Noop:
