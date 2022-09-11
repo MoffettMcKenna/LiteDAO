@@ -4,7 +4,8 @@ import sys
 from DBManager import *
 
 sys.path.insert(1, "../")
-from src.Tables import JoinedTable, Table
+from src.Tables import Table
+from src.JoinedTable import JoinedTable
 from src.Tables import ComparisonOps
 import src.Errors
 

@@ -1,9 +1,10 @@
 import sqlite3
-from dataclasses import dataclass, field
-import typing
-from enum import IntEnum
+# from dataclasses import dataclass, field
+# import typing
+# from enum import IntEnum
 
 from src.Errors import *
+from src.Definitions import *
 
 
 # TODO add date as a special type (subset of text - sqlite doesn't have native date/time support)
@@ -14,116 +15,9 @@ from src.Errors import *
 # TODO check for errors raised on add - re-add value with unique on column?
 # TODO allow for comparison values in the filtering conditions to be other columns, or columns from other tables.
 # TODO switch to using prepared statements inside a query caching mechanism which would only need a new set of params
-
-@dataclass()
-class Column:
-    """
-    Representation of a column in the table.  Allows for consolidation of the validation functions and meta-data.
-    The validation is performed through a single function which takes only the prospective value as an argument, and
-    returns True if the value is good.  This defaults to a simple type check.
-    """
-    pragma: tuple
-    headers: tuple
-    _validator: type(len) = field(init=False)
-    Name: str = field(init=False)
-    ColumnType: str = field(init=False)
-    Default: typing.Any = field(init=False)
-    PrimaryKey: bool = field(init=False)
-    NotNull: bool = field(init=False)
-
-    # Expected label names from the pragma read
-    __LBLNAME = 'name'  # name of the column
-    __LBLTYPE = 'type'  # data type of the column
-    __LBLDFT = 'dflt_value'  # default value of the column
-    __LBLPK = 'pk'  # primary key flag
-    __LBLNN = 'notnull'  # notnull/nullable flag
-
-    def __post_init__(self):
-        self.Name = self.pragma[self.headers.index(self.__LBLNAME)]
-        self.ColumnType = self.pragma[self.headers.index(self.__LBLTYPE)]
-        self.Default = self.pragma[self.headers.index(self.__LBLDFT)]
-        self.PrimaryKey = self.pragma[self.headers.index(self.__LBLPK)]
-        self.NotNull = self.pragma[self.headers.index(self.__LBLNN)]
-
-        # default validators - basic sqlite data types
-        __VALIDATORS = {
-            'integer': (lambda val: isinstance(val, int) or val == None),
-            'real': (lambda val: isinstance(val, float) or val == None),
-            'text': (lambda val: isinstance(val, str) or val == None),
-            'null': (lambda val: val is None),
-            'blob': (lambda val: True)  # just let it ride
-        }
-        self._validator = __VALIDATORS[self.ColumnType]
-
-        if self.Default is None:
-            defaults = {
-                'integer': 0,
-                'real': 0.0,
-                'text': '',
-                'null': None,
-                'blob': b''
-            }
-            self.Default = defaults[self.ColumnType]
-
-    def Validate(self, value: typing.Any) -> bool:
-        """
-        Checks if the value passed in is appropriate for this column.
-        :param value: The candidate to validate.
-        :return: True if the value can be used for this column, False otherwise.
-        """
-        return self._validator(value)
-
-    def Set_Validator(self, vdator: type(len)):
-        """
-        Changes the validation function for a column.
-        :param vdator: The new validator function.
-        """
-        self._validator = vdator
-
-    def ReadAttribute(self, attr: str) -> typing.Any:
-        """
-        Future proofing in case something shows up later we need easy access to.
-        :param attr: The meta-data attribute to get.
-        :return: The value of the attribute.
-        """
-        return self.pragma[self.headers.index(attr)]
-
-
-class ComparisonOps(IntEnum):
-    """
-    Enumeration of the operations usable in filters for the Tables class.
-    """
-    Noop = 0
-    EQUALS = 1
-    NOTEQ = 2
-    GREATER = 3
-    GRorEQ = 4
-    LESSER = 5
-    LSorEQ = 6
-    LIKE = 7
-    IN = 8
-    IS = 9
-
-    def AsStr(self):
-        strs = {
-            ComparisonOps.EQUALS: '=',
-            ComparisonOps.NOTEQ: '<>',
-            ComparisonOps.GREATER: '>',
-            ComparisonOps.GRorEQ: '>=',
-            ComparisonOps.LESSER: '<',
-            ComparisonOps.LSorEQ: '<=',
-            ComparisonOps.LIKE: 'like',
-            ComparisonOps.IN: 'in',
-            ComparisonOps.IS: 'is'
-        }
-        return strs[self.value]
-
-
-@dataclass()
-class Where:
-    column: str
-    operator: ComparisonOps
-    value: str
+# TODO add support for the full range of table and column names - sqlite supports almost anything with correct escaping
+# TODO Add support for foreign keys
+# TODO Add support for unique
 
 
 class Table:
@@ -147,8 +41,8 @@ class Table:
         self.TableName = name
 
         # grab the data
-        self.__client = sqlite3.connect(self.DB)
-        cq = self.__client.execute("pragma table_info({0})".format(self.TableName))
+        self._client = sqlite3.connect(self.DB)
+        cq = self._client.execute("pragma table_info({0})".format(self.TableName))
 
         # init the columns dictionary and primary keys list
         self._columns = {}  # this will hold _Column objects indexed by name
@@ -172,8 +66,8 @@ class Table:
         # end for col
     # end __init__()
 
-    # region Private Helpers
-    # These functions are available for inheriting classes to override, to change the behavoir across multiple calls
+    # region Hooks
+    # These functions are available for inheriting classes to override, to change the behavior across multiple calls
     # within the API.
 
     def _hook_CheckColumn(self, col: str):
@@ -235,14 +129,6 @@ class Table:
         return query, params
 
     def _hook_BuildBaseQuery(self, operation: str, columns: list = []):
-        # TODO need to evaluate performance here - if can make lazy then fine, otherwise replace
-        # queries = {
-        #     'select': f"Select {str.join(', ', columns)} From {self.TableName}",
-        #     'insert': f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})",
-        #     'delete': f'Delete from {self.TableName}',
-        #     'update': f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
-        # }
-        # return queries[operation.lower()]
         if operation.lower() == 'select':
             return f"Select {str.join(', ', columns)} From {self.TableName}"
         elif operation.lower() == 'insert':
@@ -265,16 +151,7 @@ class Table:
         else:
             raise Exception() #TODO replace with custom error for invalid db operation
 
-
-    # helper to make sure the value is formatted properly for the column
-    def _buildWhere(self, column: str, op: ComparisonOps, val: typing.Any):
-        if self._columns[column].ColumnType == 'text' and val != 'null':
-            return f"{column} {op.AsStr()} '{val}' "
-        else:
-            return f"{column} {op.AsStr()} {val}"
-
-
-    # endregion
+    #endregion
 
     #region DB Interactions
 
@@ -320,7 +197,7 @@ class Table:
         query, params = self._hook_ApplyFilters(query, params)
 
         # execute the query
-        cur = self.__client.execute(query, params)
+        cur = self._client.execute(query, params)
 
         # marshall the results and return the rows
         return cur.fetchall()
@@ -350,14 +227,17 @@ class Table:
             if c not in self._pks:
                 vals[c] = self._columns[c].Default
 
+        # do we need another hook right here to order the dictionary?
+        # for JoinedTable there is a need to get the left_col adn right_col values aligned in the query
+
         # with all the
         insert = self._hook_BuildBaseQuery('insert', vals.keys())
         params = list(vals.values())  # this will be the second arg with the order parameters into the query
 
         # perform the action
-        cur = self.__client.cursor()
+        cur = self._client.cursor()
         cur.execute(insert, params)
-        self.__client.commit()
+        self._client.commit()
 
     def UpdateValue(self, name: str, value: typing.Any, compname: str = '', operator: ComparisonOps = ComparisonOps.Noop
                     , compval: typing.Any = None):
@@ -394,9 +274,9 @@ class Table:
             update, params = self._hook_ApplyFilters(update, params)
 
         # perform the action
-        cur = self.__client.cursor()
+        cur = self._client.cursor()
         cur.execute(update, params)
-        self.__client.commit()
+        self._client.commit()
 
     def Delete(self, name: str = None, operator: ComparisonOps = ComparisonOps.Noop, value: typing.Any = None):
         """
@@ -431,10 +311,10 @@ class Table:
             delete, params = self._hook_ApplyFilters(delete, params)
 
         # perform the action
-        cur = self.__client.cursor()
+        cur = self._client.cursor()
         try:
             cur.execute(delete, params)
-            self.__client.commit()
+            self._client.commit()
         except sqlite3.OperationalError:
             print(delete)
 
@@ -509,114 +389,4 @@ class Table:
 
     #endregion
 
-
-class JoinedTable (Table):
-    """
-    A joined table is a left (primary) and right (secondary) table where the left table is extended with the columns
-    from the right table based on common values in specific columns.  In classic DB speak this is a left join with
-    the all the entries from the primary table present but only the matching entries from the secondary table.  The
-    write commands ....
-
-    When performing actions which might change the data it will only allow for changes to the primary table as multiple
-    entries might map to the secondary from the primary (ie - the primary is people and the secondary are addresses, two
-    people might share one).
-    """
-
-    # Select A.Cols, B.Cols from A left join B on A.ndx = B.a [where ....]
-
-    def __init__(self, primary: Table, secondary: Table, primaryCol: str, secondaryCol: str):
-        self.DB = primary.DB
-        self.TableName = primary.TableName
-        self._rightTable = secondary.TableName
-        self._leftcol = primaryCol
-        self._rightcol = secondaryCol
-
-        # grab the client
-        self.__client = sqlite3.connect(self.DB)
-
-        # init the columns dictionary and primary keys list
-        self._columns = {}  # this will hold _Column objects indexed by name
-        self._pks = []  # a list of the names of primary keys
-        self._filters = []  # where clauses
-
-        for table in [primary, secondary]:
-            # grab all the columns in the table
-            for col in table._columns:
-
-                #TODO add option to override this
-                # if this is the one of the join keys skip it, keep things clean
-                if f"{table.TableName}.{col}" == f"{self.TableName}.{self._leftcol}":
-                    continue
-                if f"{table.TableName}.{col}" == f"{self._rightTable}.{self._rightcol}":
-                    continue
-
-                # copy the column into our set
-                self._columns[f"{table.TableName}.{col}"] = table._columns[col]
-
-                if table._columns[col].PrimaryKey:
-                    self._pks.append(f"{table.TableName}.{col}")
-            # end for col
-        #end for table
-    # end __init__()
-
-    def GetAll(self) -> list:
-        """
-        Performs a get for all the columns in the table.  Any filters set still apply to the results.
-        :return: The results.
-        """
-        #TODO add flag for include primary keys or not - default false
-        return self.Get(list(self._columns.keys()))
-
-    def Get(self, columns: list) -> list:
-        """
-        Retrieves all values of a set of columns.  If the where clause is specified then only the matching values are
-        returned.
-
-        :param columns: A list of the column names to select.  Every needs to be in the form TableName.ColumnName.
-        :return:
-        """
-        #TODO if there is no tablename in the column entry then test if it's in the primary????
-
-        # sanity check the columns
-        for c in columns:
-            if c not in self._columns.keys():
-                raise ImaginaryColumn(self.TableName, c)
-        # end for c
-
-        # build the query - start with the basic select portion
-        # initialize the select statement with the left join
-        query = f"Select {str.join(', ', columns)} From {self.TableName}"
-        query += f" Left Join {self._rightTable}"
-        query += f" on {self.TableName}.{self._leftcol} = {self._rightTable}.{self._rightcol}"
-
-        # add the where clause(s)
-        if len(self._filters) > 0:
-            # add the intial where
-            query += f" Where {self._buildWhere(self._filters[0].column, self._filters[0].operator, self._filters[0].value)}"
-
-            # add additional clauses if needed
-            if len(self._filters) > 1:
-                for f in self._filters:
-                    query += f' and {self._buildWhere(f.column, f.operator, f.value)}'
-                # end for filters
-            # end if len > 1
-        # end if len > 0
-
-        # execute the query
-        print(query)
-        cur = self.__client.execute(query)
-
-        # marshall the results and return the rows
-        return cur.fetchall()
-
-
-class MapTable(Table):
-    """
-    A map table takes two tables and sets a relationship between the two.   
-    """
-
-    # Select A.Cols, B.Cols from A,B,M where A.ndx = M.a and M.b = B.ndx
-
-    def __init__(self, primary: Table, secondary: Table, primaryCol: str = "PrimaryKey", secondaryCol: str = "PrimaryKey"):
-        pass
 
