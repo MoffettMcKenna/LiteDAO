@@ -16,6 +16,8 @@ class JoinedTable (Table):
     people might share one).
     """
 
+    # TODO how to handle the sql representation?  since this is all virtual return an empty string?
+
 
     def __init__(self, primary: Table, secondary: Table, primaryCol: str, secondaryCol: str):
         self.DB = primary.DB
@@ -151,6 +153,9 @@ class JoinedTable (Table):
         return name
     # end _normalizeColumn
 
+    # endregion
+
+    # region Old Junk
     # def GetAll(self) -> list:
     #     """
     #     Performs a get for all the columns in the table.  Any filters set still apply to the results.
@@ -200,4 +205,4 @@ class JoinedTable (Table):
     #
     #     # marshall the results and return the rows
     #     return cur.fetchall()
-
+    # endregion

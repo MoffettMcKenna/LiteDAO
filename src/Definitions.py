@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
 
+#TODO re-evaluate if dataclass is appropriate - works, but maybe not needed?
 @dataclass()
 class Column:
     """
@@ -97,7 +98,7 @@ class Column:
         clause = f'{self.Name} {self.ColumnType}'
 
         # now check the optional fields
-        if self.Default != None:
+        if not self._isDefaultDefault():
             if self.ColumnType == 'text':
                 clause = f'{clause} Default "{self.Default}"'
             else:
@@ -109,6 +110,17 @@ class Column:
 
         # return the SQL
         return clause
+
+    def _isDefaultDefault(self) -> bool:
+        #TODO figure out how to set this up as a CLASS variable
+        defaults = {
+            'integer': 0,
+            'real': 0.0,
+            'text': '',
+            'null': None,
+            'blob': b''
+        }
+        return self.Default == defaults[self.ColumnType]
     # end Build_SQL
 
 

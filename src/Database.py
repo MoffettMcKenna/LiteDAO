@@ -22,14 +22,18 @@ class Database:
         # build a path to the database file
         self.DatabasePath = config['global']['File']
 
-        tables = []
+        # this will make the system attempt to run some alter scripts to correct
+        # differences between the found and spec'd DB
+        self._updating = config['global']['update']
+
+        self.tables = []
 
         # if the db file already exists then just load up the tables
         if os.path.isfile(self.DatabasePath):
             for table in [x.strip() for x in config['global']['TABLES'].split(',')]:
                 t = Table(table, self.DatabasePath)
                 # TODO verify the schema matches between the db file and the config file
-                tables.append(t)
+                self.tables.append(t)
 
         # have to create the new database
         else:

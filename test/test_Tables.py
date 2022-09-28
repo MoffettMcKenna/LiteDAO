@@ -706,3 +706,16 @@ def test_Update_BadFilterValue(buildDBFile):
     assert data[6][4] == '1024-01-28'
 
 # endregion
+
+# region SQL Tests
+
+def test_BuildSQL(buildDBFile):
+
+    t = Table("Person", buildDBFile)
+
+    tsql = t.Build_SQL()
+    actual = "Create Table Person (id integer primary key, fname text not null, lname text not null, nickname text, birthday text);"
+
+    assert tsql.lower() == actual.lower()
+
+# endregion

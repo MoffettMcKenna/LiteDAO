@@ -389,4 +389,9 @@ class Table:
 
     #endregion
 
-
+    def Build_SQL(self):
+        """
+        Creates a SQL statement which would build this table as is.
+        :return: The SQL Statement.
+        """
+        return f'Create Table {self.TableName} ({", ".join([self._columns[c].Build_SQL() for c in self._columns.keys()])});'
