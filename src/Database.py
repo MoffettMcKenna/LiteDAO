@@ -25,6 +25,7 @@ class Database:
         config = configparser.ConfigParser()
         config.read(file)
         self.tables = []
+        tokens = {}
 
         # grab the file path and see if already exists
         self.DatabasePath = config['global']['File']
@@ -37,6 +38,10 @@ class Database:
         if file_existed:
             # read all the sql creates from the metadata
             sqlstmts = self._client.execute("select sql from sqlite_master where type = 'table'").fetchall()
+
+            for sql in sqlstmts:
+                tname, tdata = _parse_create(sql[0])
+                tokens[tname] = tdata
 
         # this will make the system attempt to run some alter scripts to correct
         # differences between the found and spec'd DB
@@ -51,17 +56,14 @@ class Database:
             if table.lower() == 'global':
                 continue
 
-            # create new table
-            ntable = Table(table, self._client)
-
-            # create the table and save it
+            # create new table - pass in None instead of the tokens dict for the table if not found in db
+            ntable = Table(table, self._client, tokens[table] if table in tokens.keys() else None)
             self.tables.append(ntable)
 
             if file_existed:
                 #get the list of differences
-
-                #try to run an update for each difference
-                pass
+                if not ntable.IsValid:
+                    ntable.Sync()
             else:
                 # empty db, need to create the table
                 Table.Create()

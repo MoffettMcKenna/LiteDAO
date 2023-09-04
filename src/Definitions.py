@@ -2,45 +2,127 @@ import re
 from dataclasses import dataclass, field
 import typing
 from enum import IntEnum
+from sqlparse import tokens as Token
 
 #TODO add support for unique/check/collate/generated constraints
-@dataclass()
 class Column:
     """
     Representation of a column in the table.  Allows for consolidation of the validation functions and meta-data.
     The validation is performed through a single function which takes only the prospective value as an argument, and
     returns True if the value is good.  This defaults to a simple type check.
     """
-    pragma: tuple
-    headers: tuple
-    _validator: type(len) = field(init=False)
-    Name: str = field(init=False)
-    ColumnType: str = field(init=False)
-    Default: typing.Any = field(init=False)
-    PrimaryKey: bool = field(init=False)
-    NotNull: bool = field(init=False)
 
-    # Expected label names from the pragma read
-    __LBLNAME = 'name'  # name of the column
-    __LBLTYPE = 'type'  # data type of the column
-    __LBLDFT = 'dflt_value'  # default value of the column
-    __LBLPK = 'pk'  # primary key flag
-    __LBLNN = 'notnull'  # notnull/nullable flag
+    @property
+    def Name(self):
+        return self._name
 
-    def __post_init__(self):
-        #TODO convert to new match statement?
-        # default validators - basic sqlite data types
-        vdators = {
-            'integer': (lambda val: isinstance(val, int) or val == None),
-            'real': (lambda val: isinstance(val, float) or val == None),
-            'text': (lambda val: isinstance(val, str) or val == None),
-            'null': (lambda val: val is None),
-            'blob': (lambda val: True)  # just let it ride
-        }
-        self._validator = vdators[self.ctype]
+    @property
+    def ColumnType(self):
+        return self._ct
+    
+    @property
+    def DefaultValue(self): 
+        return self._default
 
-        if self.default is None:
-            self.sql_default = False
+    @property
+    def PrimaryKey(sef):
+        return self._ispk
+        
+    @property
+    def Nullable(self):
+        return self._null
+
+    @property
+    def ForeignKey(self):
+        return self._isfk
+
+    @property
+    def IsForeignKey(self):
+        return self._isfk is not None
+
+    @property
+    def Unique(self):
+        return self._solo
+
+    @property
+    def IsValid(self):
+        return self._valid
+    
+    def __init__(self, name: str, props: str, toks = None):
+        """
+        Convert a string from the ini file with the column description into a column object.
+        """
+        # pull off the validation function
+        oparan = props.find('(')
+        cparan = props.find(')', oparan)
+
+        self._valid = True
+
+        if oparan > 0:
+            parts = props[:oparan].split(',')
+            
+            vadtor = props[oparan:cparan]
+            tech, func = vdator.split(':')
+            if tech.strip(' ').lower() == 'regex':
+                self._validator = lambda x: re.search(func.strip(), x) != None
+            elif tech.strip(' ').lower() == 'math':
+                func[0] = 'x'
+                self._validator = lambda x: func.strip(' ')
+        else:
+            parts = props.split(',')
+            #TODO convert to new match statement?
+            # default validators - basic sqlite data types
+            vdators = {
+                'integer': (lambda val: isinstance(val, int) or val == None),
+                'real': (lambda val: isinstance(val, float) or val == None),
+                'text': (lambda val: isinstance(val, str) or val == None),
+                'null': (lambda val: val is None),
+                'blob': (lambda val: True)  # just let it ride
+            }
+            self._validator = vdators[self.ctype]
+
+        # object field defaults
+        self._ct = parts[0].strip()  # column type will always be there
+        self._null = True
+        self._solo = False
+        self._ispk = False
+        self._fk = None
+        self._default = None
+
+        for p in parts[1:]:
+            if p.strip().lower() == 'required':
+                self._null = False  # equivalent of not null
+            if p.strip().lower() == 'unique':
+                self._solo = True
+            if p.strip().lower() == 'key':
+                if self._fk is not None:
+                    raise ValueError(f"{name}: Cannot be both foreign and primary key")
+               
+                self._ispk = True
+                self._null = False # equivalent of not null
+            if p.strip().lower().startswith('reference'):
+                if self._ispk:
+                    raise ValueError(f"{name}: Cannot be both foreign and primary key")
+                
+                # parse the reference and save to fk
+                pp = p.strip().split(' ')
+                if len(pp) == 2:
+                    self._fk = pp[1]
+                else:
+                    #error! expect 'reference <table>.<col>' - found extra spaces
+                    pass
+            if p.strip().lower().startswith('default'):
+                # extract the default and pass it in
+                pp = p.strip().split(' ')
+                if len(pp) == 2:
+                    self._default = pp[1]
+                else:
+                    #error! expect 'default <value>' - found extra spaces
+                    pass
+        #for p in parts
+
+        if self._default is None:
+            self._sql_default = False
             #TODO convert to new match statement?
             defaults = {
                 'integer': 0,
@@ -49,10 +131,14 @@ class Column:
                 'null': None,
                 'blob': b''
             }
-            self.default = defaults[self.ctype]
+            self._default = defaults[self.ctype]
         else:
             self.sql_default = True
-    #end __post_init__
+    
+        for t in toks:
+
+
+    #end __init__
 
     def Validate(self, value: typing.Any) -> bool:
         """
@@ -129,66 +215,6 @@ class Column:
         return self.Default == defaults[self.ColumnType]
     # end Build_SQL
 
-    #TODO drop the dataclass descriptor and make this the constructor
-    @classmethod
-    def make_column(cls, name: str, props: str):
-        """
-        Convert a string from the ini file with the column description into a column object.
-        """
-        # pull off the validation function
-        oparan = props.find('(')
-        cparan = props.find(')', oparan)
-
-        if oparan > 0:
-            parts = props[:oparan].split(',')
-        else:
-            parts = props.split(',')
-
-        # arguments to the constructor
-        ct = parts[0].strip()  # column type will always be there
-        null = True
-        solo = False
-        pk = False
-        fk = None
-        dflt = None
-
-        for p in parts[1:]:
-            if p.strip().lower() == 'required':
-                null = False  # equivalent of not null
-            if p.strip().lower() == 'unique':
-                solo = True
-            if p.strip().lower() == 'key':
-                if fk is not None:
-                    # toss error!
-                    pass
-                pk = True
-                null = False # equivalent of not null
-            if p.strip().lower().startswith('reference'):
-                if pk:
-                    #error!
-                    pass
-                # parse the reference and save to fk
-                pp = p.strip().split(' ')
-                if len(pp) == 2:
-                    fk = pp[1]
-                else:
-                    #error! expect 'reference <table>.<col>' - found extra spaces
-                    pass
-            if p.strip().lower().startswith('default'):
-                # extract the default and pass it in
-                pp = p.strip().split(' ')
-                if len(pp) == 2:
-                    dflt = pp[1]
-                else:
-                    #error! expect 'default <value>' - found extra spaces
-                    pass
-        #for p in parts
-
-        #use the oparan and cparan to read the validator
-
-        return cls(name, ct, null, solo, pk, fk, dflt)
-    #make_column()
-
     def make_sql(self, wname: bool = False) -> str:
         """
         Generates the part of the sql statement which creates this particular column.
@@ -205,7 +231,7 @@ class Column:
             sql = f"{sql} not null"
         if self.unique:
             sql = f"{sql} unique"
-        if self.sql_default:
+        if self._sql_default:
             if self.ctype == 'text':
                 sql = f"{sql} default '{self.default}'"
             else:
@@ -221,8 +247,8 @@ class Column:
 
         return sql
     #make_sql
-#end Class Column
 
+#end Class Column
 
 class ComparisonOps(IntEnum):
     """

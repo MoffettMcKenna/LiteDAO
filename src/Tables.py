@@ -70,7 +70,7 @@ class Table:
     #end __init__()
 
 
-    def __init__(self, section: configparser.SectionProxy, conn: sqlite3.Connection):
+    def __init__(self, section: configparser.SectionProxy, conn: sqlite3.Connection, toks): #TODO annotation for toks
         self._client = conn
         self._seeds = None  # start with an empty seeding file
 
@@ -79,39 +79,39 @@ class Table:
         self._pks = []  # a list of the names of primary keys
         self._filters = []  # where clauses
 
+        self._valid = True;
+        
+        # TODO how to allow for capitalization differences?
+        # the seeding values file is not a real column, but save it for later use
+        if 'Values' in section.keys()
+            self._seeds = section['Values']
+            section.pop('Values') # clear to not process as column
+        
         # the names will the keys, the details will be the value
         for col in section.keys():
-            # the seeding values file is not a real column, but save it for later use
-            if col.lower() == 'values':
-                self._seeds = section[col]
+            if toks not None:
+                self._columns[col] = Column(col, section[col], toks[col] if col in toks.keys() else None)
+                toks.pop(col)
+
+                # if the column didn't validate we're out of sync
+                self._valid &= self._columns[col].IsValid
             else:
                 # save the column after converting to an object
-                self._columns[col] = Column.make_column(col, section[col])
+                self._columns[col] = Column(col, section[col])
+                # we have a new column in the ini file
+                self._valid = False 
 
-                # test for pk status
-                if self._columns[col].PrimaryKey:
-                    # if this is a primary key save it in that list
-                    self._pks.append(col)
+            # test for pk status
+            if self._columns[col].PrimaryKey:
+                # if this is a primary key save it in that list
+                self._pks.append(col)
         #end for col
 
+        # if there were any columns in the db not also in ini file we are out of sync
+        if len(toks) != 0:
+            self._valid = False
+
     #end init()
-
-    def VerifySchema(self, sql: str) -> bool:
-        """
-        Verify the correctness of the active schema in the DB against the expected configuration.  When possible
-        it updates the current schema to match the specification.
-        :param sql: A SQL Create statement reflecting the current schema of the table in the db.
-        :return: True if it found the current schema up to date or could update it.  False if the db is out of spec.
-        """
-        # convert the sql statements to a dictionary of tables (which has a
-        tname, tdata = self._parse_create(sql)
-
-        # now compare with the table's columns
-
-        # try to make any updates needed
-
-        return False
-    # end VerifySchema
 
     def Create(self):
         """
@@ -503,6 +503,10 @@ class Table:
 
     def __eq__(self, other: src.Tables.Table) -> bool:
         return False
+
+    @property
+    def IsValid(self):
+        return self._valid
 
     def Build_SQL(self):
         """
