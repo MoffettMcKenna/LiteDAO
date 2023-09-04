@@ -1,8 +1,11 @@
+import configparser
 import sqlite3
 # from dataclasses import dataclass, field
 # import typing
 # from enum import IntEnum
+from sqlparse import engine, tokens as Token
 
+import src.Tables
 from src.Errors import *
 from src.Definitions import *
 
@@ -64,7 +67,68 @@ class Table:
                 # if this is a primary key save it in that list
                 self._pks.append(name)
         # end for col
-    # end __init__()
+    #end __init__()
+
+
+    def __init__(self, section: configparser.SectionProxy, conn: sqlite3.Connection):
+        self._client = conn
+        self._seeds = None  # start with an empty seeding file
+
+        # init the columns dictionary and primary keys list
+        self._columns = {}  # this will hold _Column objects indexed by name
+        self._pks = []  # a list of the names of primary keys
+        self._filters = []  # where clauses
+
+        # the names will the keys, the details will be the value
+        for col in section.keys():
+            # the seeding values file is not a real column, but save it for later use
+            if col.lower() == 'values':
+                self._seeds = section[col]
+            else:
+                # save the column after converting to an object
+                self._columns[col] = Column.make_column(col, section[col])
+
+                # test for pk status
+                if self._columns[col].PrimaryKey:
+                    # if this is a primary key save it in that list
+                    self._pks.append(col)
+        #end for col
+
+    #end init()
+
+    def VerifySchema(self, sql: str) -> bool:
+        """
+        Verify the correctness of the active schema in the DB against the expected configuration.  When possible
+        it updates the current schema to match the specification.
+        :param sql: A SQL Create statement reflecting the current schema of the table in the db.
+        :return: True if it found the current schema up to date or could update it.  False if the db is out of spec.
+        """
+        # convert the sql statements to a dictionary of tables (which has a
+        tname, tdata = self._parse_create(sql)
+
+        # now compare with the table's columns
+
+        # try to make any updates needed
+
+        return False
+    # end VerifySchema
+
+    def Create(self):
+        """
+        Adds the
+        :return:
+        """
+        sql = self.Build_SQL()
+        try:
+            with self._client:
+                self._client.execute(sql)
+        except sqlite3.DataError as de:
+            pass
+        except sqlite3.IntegrityError as ie:
+            pass
+
+        # now grab the seed data and write it to the DB
+    # end Create()
 
     # region Hooks
     # These functions are available for inheriting classes to override, to change the behavior across multiple calls
@@ -388,6 +452,57 @@ class Table:
             raise InvalidColumnValue(self.TableName, name, value)
 
     #endregion
+
+    def _parse_create(self, sql: str):
+        """
+        Converts a create statement into a data structure (format still TBD)
+        :return: A tuple of the table name and the data structure.
+        """
+        tdata = {}
+        stack = engine.FilterStack()
+        # returns a generator to the list of tokens
+        parsed = stack.run(sql.replace('\r', '').replace('\n', '').replace('\t', ' '))
+
+        # get the
+        stmt = next(parsed)
+
+        # setup to remove the whitespace as they're not needed
+        toks = [tok for tok in stmt if not tok.is_whitespace]  # convert to generator?
+
+        # long winded (refactor?), but matching pattern "Create Table <name> (...."
+        if toks[0].match(Token.Keyword.DDL, 'create') and toks[1].match(Token.Keyword, 'table') and toks[3].match(
+                Token.Punctuation, '('):
+            # save the table name
+            tname = toks[2].value
+
+            # first column name is index 4
+            i = 4
+
+            # collect the columns
+            while not toks[i].match(Token.Punctuation, ')'):
+                # get the column name
+                cname = toks[i].value
+                i += 1
+
+                cdata = []
+                # grab all the column properties
+                while not toks[i].match(Token.Punctuation, ',') and not toks[i].match(Token.Punctuation, ')'):
+                    cdata.append(toks[i].value)
+                    i += 1
+                # end while not comma
+                tdata[cname] = cdata
+
+                # advance past the comma but leave alone when exited the above while due to ')'
+                if toks[i].match(Token.Punctuation, ','):
+                    i += 1
+            # end while not close-paran
+        # end if tok chain
+
+        return tname, tdata
+    # end parse_create()
+
+    def __eq__(self, other: src.Tables.Table) -> bool:
+        return False
 
     def Build_SQL(self):
         """

@@ -71,6 +71,11 @@ def buildDBFile():
         cur.execute(inswallet, (2, 654.85, '3032-03-10'))
         cur.execute(inswallet, (6, 1010.12, '1808-08-09'))
 
+        #  Create Table PhoneNumber (
+        #         id integer primary key,
+        #         number text not null unique
+        # )
+
         con.commit()
         con.close()
 
