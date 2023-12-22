@@ -1,13 +1,11 @@
 import configparser
 import sqlite3
-# from dataclasses import dataclass, field
-# import typing
-# from enum import IntEnum
+import typing
 from sqlparse import engine, tokens as Token
 
-import src.Tables
-from src.Errors import *
-from src.Definitions import *
+from Errors import *
+from Definitions import *
+from Columns import Column
 
 
 # TODO add date as a special type (subset of text - sqlite doesn't have native date/time support)
@@ -19,9 +17,7 @@ from src.Definitions import *
 # TODO allow for comparison values in the filtering conditions to be other columns, or columns from other tables.
 # TODO switch to using prepared statements inside a query caching mechanism which would only need a new set of params
 # TODO add support for the full range of table and column names - sqlite supports almost anything with correct escaping
-# TODO Add support for foreign keys
-# TODO Add support for unique
-
+# TODO revisit how the connection is made and used - protect with with stmts?  connection pool?
 
 class Table:
     """
@@ -39,58 +35,27 @@ class Table:
 
     #endregion
 
-    def __init__(self, name: str, dbfile: str):
-        self.DB = dbfile
-        self.TableName = name
-
-        # grab the data
-        self._client = sqlite3.connect(self.DB)
-        cq = self._client.execute("pragma table_info({0})".format(self.TableName))
-
-        # init the columns dictionary and primary keys list
-        self._columns = {}  # this will hold _Column objects indexed by name
-        self._pks = []  # a list of the names of primary keys
-        self._filters = []  # where clauses
-
-        # clabels are the pragma field names for the column meta data
-        self._clabels = [x[0] for x in cq.description]
-
-        # move the data into the dictionary
-        for col in cq.fetchall():
-            name = col[self._clabels.index(self.__LBLNAME)]
-
-            # save the name of the column by the index of the key 
-            self._columns[name] = Column(pragma=col, headers=self._clabels)
-
-            # test for pk status
-            if self._columns[name].PrimaryKey:
-                # if this is a primary key save it in that list
-                self._pks.append(name)
-        # end for col
-    #end __init__()
-
-
-    def __init__(self, section: configparser.SectionProxy, conn: sqlite3.Connection, toks): #TODO annotation for toks
+    def __init__(self, section: configparser.SectionProxy, conn: sqlite3.Connection, toks={}): #TODO annotation for toks
         self._client = conn
         self._seeds = None  # start with an empty seeding file
+        self.TableName = section.name
 
         # init the columns dictionary and primary keys list
         self._columns = {}  # this will hold _Column objects indexed by name
         self._pks = []  # a list of the names of primary keys
         self._filters = []  # where clauses
 
-        self._valid = True;
-        
-        # TODO how to allow for capitalization differences?
+        self._valid = True
+
         # the seeding values file is not a real column, but save it for later use
-        if 'Values' in section.keys()
+        if 'Values' in section.keys():
             self._seeds = section['Values']
-            section.pop('Values') # clear to not process as column
+            section.pop('Values')  # clear to not process as column
         
         # the names will the keys, the details will be the value
         for col in section.keys():
-            if toks not None:
-                self._columns[col] = Column(col, section[col], toks[col] if col in toks.keys() else None)
+            if len(toks.keys()) > 0:
+                self._columns[col] = Column(col, section[col], toks[col] if col in toks.keys() else [])
                 toks.pop(col)
 
                 # if the column didn't validate we're out of sync
@@ -105,13 +70,13 @@ class Table:
             if self._columns[col].PrimaryKey:
                 # if this is a primary key save it in that list
                 self._pks.append(col)
-        #end for col
+        # end for col
 
         # if there were any columns in the db not also in ini file we are out of sync
-        if len(toks) != 0:
+        if len(toks.keys()) != 0:
             self._valid = False
 
-    #end init()
+    # end init()
 
     def Create(self):
         """
@@ -214,6 +179,12 @@ class Table:
                 return f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
         else:
             raise Exception() #TODO replace with custom error for invalid db operation
+
+    def _normalizeColumn(self, name: str) -> str:
+        if name in self._columns.keys():
+            return name
+        else:
+            raise ImaginaryColumn(self.TableName, name)
 
     #endregion
 
@@ -395,9 +366,7 @@ class Table:
         """
 
         # verify the column
-        ### _hook_CheckColumn
-        if name not in self._columns.keys():
-            raise ImaginaryColumn(self.TableName, name)
+        name = self._normalizeColumn(name)
 
         # TODO verify the operation is valid for the column type
 
@@ -501,7 +470,7 @@ class Table:
         return tname, tdata
     # end parse_create()
 
-    def __eq__(self, other: src.Tables.Table) -> bool:
+    def __eq__(self, other: object) -> bool:
         return False
 
     @property

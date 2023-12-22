@@ -1,9 +1,10 @@
+import configparser
+
 import pytest
 import sqlite3
 import os
 
 test_db_version = 2
-
 
 @pytest.fixture
 def buildDBFile():
@@ -25,8 +26,6 @@ def buildDBFile():
         except (sqlite3.OperationalError, IndexError):
             # if the tables is DNE, we have the wrong db, set create
             create = True
-        finally:
-            con.close()
 
     # if any of the above triggered, rebuild the db
     if create:
@@ -77,9 +76,8 @@ def buildDBFile():
         # )
 
         con.commit()
-        con.close()
 
-    return 'test.db'
+    return con
 
 @pytest.fixture
 def dirtyDB():
@@ -94,3 +92,10 @@ def dirtyDB():
         create = True
     finally:
         con.close()
+
+@pytest.fixture
+def config():
+    cp = configparser.ConfigParser()
+    file = 'test.ini'
+    cp.read(file)
+    return cp

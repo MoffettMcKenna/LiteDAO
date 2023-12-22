@@ -1,20 +1,17 @@
-import sys
-
 # grab the setup for the DB from here
-from DBManager import *
+from Fixtures import *
 
-sys.path.insert(1, "../")
-from src.Tables import Table
-from src.JoinedTable import JoinedTable
-from src.Tables import ComparisonOps
-import src.Errors
+from Tables import Table
+from JoinedTable import JoinedTable
+from Tables import ComparisonOps
+import Errors
 
 
 # region Get Tests
 
-def test_Get_AllColumns(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Get_AllColumns(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
 
@@ -77,9 +74,9 @@ def test_Get_AllColumns(buildDBFile):
     assert data[6][6] is None
 
 
-def test_Get_OneColumn(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Get_OneColumn(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
     data = jt.Get(["Person.fname"])
@@ -93,9 +90,9 @@ def test_Get_OneColumn(buildDBFile):
     assert data[6][0] == "Jane"
 
 
-def test_Get_MultipleColumns(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Get_MultipleColumns(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
     data = jt.Get(["Person.fname", "Wallet.amount", "Person.nickname"])
@@ -129,16 +126,16 @@ def test_Get_MultipleColumns(buildDBFile):
     assert data[6][2] == 'Grams'
 
 
-def test_Get_DNE_Column(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Get_DNE_Column(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["id, fname, name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["id, name, lname"])
 
 
@@ -147,9 +144,9 @@ def test_Get_DNE_Column(buildDBFile):
 
 # region Filter Tests
 
-def test_Filter_Null_Nickname(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Filter_Null_Nickname(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
 
@@ -157,49 +154,48 @@ def test_Filter_Null_Nickname(buildDBFile):
     data = jt.GetAll()
 
     assert len(data) == 2
-    assert data[0][1] == "Jack"
-    assert data[0][2] == "Smith"
-    assert data[0][3] is None
+    assert data[0][0] == "Jack"
+    assert data[0][1] == "Smith"
+    assert data[0][2] is None
 
-    assert data[1][1] == "Jill"
-    assert data[1][2] == "Smith"
-    assert data[1][3] is None
+    assert data[1][0] == "Jill"
+    assert data[1][1] == "Smith"
+    assert data[1][2] is None
 
-    t.ClearFilters()
+    jt.ClearFilters()
 
 
-def test_Filter_LastName(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Filter_LastName(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
 
     jt.Filter("lname", ComparisonOps.IS, 'Doe')
     data = jt.GetAll()
 
-
     assert len(data) == 2
-    assert data[0][1] == "John"
-    assert data[0][2] == "Doe"
-    assert data[0][3] == "Pops"
-    assert data[0][4] == "1909-03-10"
+    assert data[0][0] == "John"
+    assert data[0][1] == "Doe"
+    assert data[0][2] == "Pops"
+    assert data[0][3] == "1909-03-10"
 
-    assert data[1][1] == "Jane"
-    assert data[1][2] == "Doe"
-    assert data[1][3] == "Grams"
-    assert data[1][4] == "1024-01-28"
+    assert data[1][0] == "Jane"
+    assert data[1][1] == "Doe"
+    assert data[1][2] == "Grams"
+    assert data[1][3] == "1024-01-28"
 
     jt.ClearFilters()
 
 
-def test_ClearFilters(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_ClearFilters(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
 
     jt.Filter("nickname", ComparisonOps.IS, None)
-    data = t.GetAll()
+    data = jt.GetAll()
 
     assert len(data) == 2
 
@@ -209,16 +205,16 @@ def test_ClearFilters(buildDBFile):
     assert len(data) == 7
 
 
-def test_Filter_InvalidValue(buildDBFile):
-    per = Table("Person", buildDBFile)
-    bifold = Table("Wallet", buildDBFile)
+def test_Filter_InvalidValue(config, buildDBFile):
+    per = Table(config["Person"], buildDBFile)
+    bifold = Table(config["Wallet"], buildDBFile)
 
     jt = JoinedTable(per, bifold, "id", "personid")
 
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.ImaginaryColumn):
         jt.Filter("id", ComparisonOps.IS, '20')
 
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         jt.Filter("nickname", ComparisonOps.IS, 20)
 
     # just to be safe

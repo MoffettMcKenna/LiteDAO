@@ -1,8 +1,9 @@
 import sqlite3
+import typing
 
-from src.Tables import Table
-from src.Errors import *
-from src.Definitions import *
+from Tables import Table
+from Errors import *
+from Definitions import *
 
 class JoinedTable (Table):
     """
@@ -18,16 +19,19 @@ class JoinedTable (Table):
 
     # TODO how to handle the sql representation?  since this is all virtual return an empty string?
 
+    @property
+    def TableName(self):
+        return f'{self._leftTable}/{self._rightTable}'
+
 
     def __init__(self, primary: Table, secondary: Table, primaryCol: str, secondaryCol: str):
-        self.DB = primary.DB
-        self.TableName = primary.TableName
+        self._leftTable = primary.TableName
         self._rightTable = secondary.TableName
         self._leftcol = primaryCol
         self._rightcol = secondaryCol
 
         # grab the client
-        self._client = sqlite3.connect(self.DB)
+        self._client = primary._client
 
         # init the columns dictionary and primary keys list
         self._columns = {}  # this will hold _Column objects indexed by name
@@ -40,7 +44,7 @@ class JoinedTable (Table):
 
                 # TODO add option to override this
                 # if this is the one of the join keys skip it, keep things clean
-                if f"{table.TableName}.{col}" == f"{self.TableName}.{self._leftcol}":
+                if f"{table.TableName}.{col}" == f"{self._leftTable}.{self._leftcol}":
                     continue
                 if f"{table.TableName}.{col}" == f"{self._rightTable}.{self._rightcol}":
                     continue
@@ -119,28 +123,28 @@ class JoinedTable (Table):
     def _hook_BuildBaseQuery(self, operation: str, columns: list = []):
         if operation.lower() == 'select':
             # Select A.Cols, B.Cols from A left join B on A.ndx = B.a [where ....]
-            return f"Select {str.join(', ', columns)} From {self.TableName} Left Join {self._rightTable} on {self.TableName}.{self._leftcol} = {self._rightTable}.{self._rightcol} "
+            return f"Select {str.join(', ', columns)} From {self._leftTable} Left Join {self._rightTable} on {self._leftTable}.{self._leftcol} = {self._rightTable}.{self._rightcol} "
 
         elif operation.lower() == 'insert':
             # insert into A (<cols>) values (?,?...); insert into B (<right_col>, <other cols> values (<left_col>, <other_vals>)
             if len(columns) == 1:
-                return f"Insert into {self.TableName}({columns[0]}) values (?)"
+                return f"Insert into {self._leftTable}({columns[0]}) values (?)"
             elif len(columns) == 0:
                 raise Exception()  # TODO replace with custom error for empty column list
             else:
-                return f"Insert into {self.TableName}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})"
+                return f"Insert into {self._leftTable}({str.join(',', columns)}) values ({str.join(', ', ['?' for c in columns])})"
         # end if insert
 
         elif operation.lower() == 'delete':
-            return f"Delete from {self.TableName}"
+            return f"Delete from {self._leftTable}"
 
         elif operation.lower() == 'update':
             if len(columns) == 1:
-                return f"Update {self.TableName} set {columns[0] + ' = ?'}"
+                return f"Update {self._leftTable} set {columns[0] + ' = ?'}"
             elif len(columns) == 0:
                 raise Exception()  # TODO replace with custom error for empty column list
             else:
-                return f"Update {self.TableName} set {str.join(', ', [x + ' = ?' for x in columns])}"
+                return f"Update {self._leftTable} set {str.join(', ', [x + ' = ?' for x in columns])}"
         else:
             raise Exception()  # TODO replace with custom error for invalid db operation
 
@@ -149,8 +153,13 @@ class JoinedTable (Table):
     # region Helpers
 
     def _normalizeColumn(self, name: str) -> str:
+        if name in self._columns.keys():
+            return name
+        elif f'{self._leftTable}.{name}' in self._columns.keys():
+            return f'{self._leftTable}.{name}'
+        else:
+            raise ImaginaryColumn(self.TableName, name)
 
-        return name
     # end _normalizeColumn
 
     # endregion

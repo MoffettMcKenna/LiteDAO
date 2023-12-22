@@ -1,18 +1,16 @@
-import sys
 
 # grab the setup for the DB from here
-from DBManager import *
+from Fixtures import *
 
-sys.path.insert(1, "../")
-from src.Tables import Table
-from src.Tables import ComparisonOps
-import src.Errors
+from Tables import Table
+from Tables import ComparisonOps
+import Errors
 
 
 # region Get Tests
 
-def test_Get_AllColumns(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Get_AllColumns(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     data = t.GetAll()
 
     assert data[0][1] == "Joe"
@@ -51,8 +49,8 @@ def test_Get_AllColumns(buildDBFile):
     assert data[6][4] == '1024-01-28'
 
 
-def test_Get_OneColumn(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Get_OneColumn(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     data = t.Get(["fname"])
 
     assert data[0][0] == "Joe"
@@ -64,8 +62,8 @@ def test_Get_OneColumn(buildDBFile):
     assert data[6][0] == "Jane"
 
 
-def test_Get_OneColumns(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Get_OneColumns(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     data = t.Get(["fname", "id"])
 
     assert data[0][0] == "Joe"
@@ -84,16 +82,16 @@ def test_Get_OneColumns(buildDBFile):
     assert data[6][1] == 7
 
 
-def test_Get_DNE_Column(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Get_DNE_Column(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["id, fname, name"])
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         data = t.Get(["id, name, lname"])
 
 
@@ -101,8 +99,8 @@ def test_Get_DNE_Column(buildDBFile):
 
 # region Filter Tests
 
-def test_Filter_Null_Nickname(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Filter_Null_Nickname(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     t.Filter("nickname", ComparisonOps.IS, None)
     data = t.GetAll()
 
@@ -118,8 +116,8 @@ def test_Filter_Null_Nickname(buildDBFile):
     t.ClearFilters()
 
 
-def test_Filter_LastName(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Filter_LastName(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     t.Filter("lname", ComparisonOps.IS, 'Doe')
     data = t.GetAll()
 
@@ -137,8 +135,8 @@ def test_Filter_LastName(buildDBFile):
     t.ClearFilters()
 
 
-def test_ClearFilters(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_ClearFilters(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     t.Filter("nickname", ComparisonOps.IS, None)
     data = t.GetAll()
 
@@ -150,13 +148,13 @@ def test_ClearFilters(buildDBFile):
     assert len(data2) == 7
 
 
-def test_Filter_InvalidValue(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Filter_InvalidValue(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         t.Filter("id", ComparisonOps.IS, '20')
 
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         t.Filter("nickname", ComparisonOps.IS, 20)
 
     # just to be safe
@@ -170,8 +168,8 @@ def startsJ(value: str) -> bool:
     return value.startswith('J')
 
 
-def test_Validator(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Validator(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     # check the string validator - don't run these queries they return nothing
     t.UpdateValidators('fname', startsJ)
@@ -179,7 +177,7 @@ def test_Validator(buildDBFile):
     t.Filter('fname', ComparisonOps.LIKE, 'Jacob')
     t.Filter('fname', ComparisonOps.IS, 'June')
     # this will fail
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         t.Filter('fname', ComparisonOps.LIKE, 'Issac')
 
     # now clear the filters for future tests
@@ -190,8 +188,8 @@ def test_Validator(buildDBFile):
 
 # region Add Tests
 
-def test_Add_AllValues(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Add_AllValues(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01'})
     t.Filter('fname', ComparisonOps.LIKE, 'Test%')
@@ -210,8 +208,8 @@ def test_Add_AllValues(buildDBFile):
     t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
 
 
-def test_Add_DefaultDefaults(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Add_DefaultDefaults(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     t.Add({})
     t.Filter('fname', ComparisonOps.IS, '')
@@ -230,8 +228,8 @@ def test_Add_DefaultDefaults(buildDBFile):
     t.Delete('fname', ComparisonOps.EQUALS, '')
 
 
-def test_Add_NewDefault(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Add_NewDefault(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
     t.SetDefault('fname', 'Tony')
     t.SetDefault('lname', 'Testing')
 
@@ -253,8 +251,8 @@ def test_Add_NewDefault(buildDBFile):
 
 
 # verify the order of the values doesn't matter to the add
-def test_Add_ValueOrder(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Add_ValueOrder(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     t.Add({'nickname': 'QA', 'lname': 'Testing', 'fname': 'TestGuy', 'birthday': '1111-01-01'})
     t.Filter('fname', ComparisonOps.LIKE, 'Test%')
@@ -273,16 +271,16 @@ def test_Add_ValueOrder(buildDBFile):
     t.Delete('fname', ComparisonOps.EQUALS, 'TestGuy')
 
 
-def test_Add_InvalidColumn(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Add_InvalidColumn(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         t.Add({'name': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01'})
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nick': 'QA', 'birthday': '1111-01-01'})
 
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         t.Add({'fname': 'TestGuy', 'lname': 'Testing', 'nickname': 'QA', 'birthday': '1111-01-01', 'age': 10})
 
 
@@ -290,8 +288,8 @@ def test_Add_InvalidColumn(buildDBFile):
 
 # region Delete Tests
 
-def test_DeleteOne(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_DeleteOne(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # confirm the expected number of entries
     data1 = t.GetAll()
@@ -308,8 +306,8 @@ def test_DeleteOne(buildDBFile, dirtyDB):
     assert len(data1) == len(data2) + 1
 
 
-def test_DeleteMultiple(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_DeleteMultiple(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # confirm the expected number of entries
     data1 = t.GetAll()
@@ -326,8 +324,8 @@ def test_DeleteMultiple(buildDBFile, dirtyDB):
     assert len(data1) == len(data2) + 2
 
 
-def test_Delete_ClassFilter(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_Delete_ClassFilter(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # confirm the expected number of entries
     data1 = t.GetAll()
@@ -350,15 +348,15 @@ def test_Delete_ClassFilter(buildDBFile, dirtyDB):
     assert len(data1) == len(data2) + 4
 
 
-def test_Delete_BadColumn(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_Delete_BadColumn(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # confirm the expected number of entries
     data1 = t.GetAll()
     assert len(data1) == 7
 
     # try to delete based on a non-existant column
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         t.Delete('name', ComparisonOps.IS, 'Mimi')
 
     # confirm the expected number of entries
@@ -366,15 +364,15 @@ def test_Delete_BadColumn(buildDBFile, dirtyDB):
     assert len(data2) == len(data1)
 
 
-def test_Delete_BadFilterValue(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_Delete_BadFilterValue(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # confirm the expected number of entries
     data1 = t.GetAll()
     assert len(data1) == 7
 
     # try to delete based on a non-existant column
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         t.Delete('nickname', ComparisonOps.IS, 10)
 
     # confirm the expected number of entries
@@ -383,8 +381,8 @@ def test_Delete_BadFilterValue(buildDBFile, dirtyDB):
 
 
 # test running with both inline and class filters
-def test_Delete_DualFilterType(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_Delete_DualFilterType(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # set the filter
     t.Filter('lname', ComparisonOps.IS, 'Doe')
@@ -439,8 +437,8 @@ def test_Delete_DualFilterType(buildDBFile, dirtyDB):
 
 # region Update Tests
 
-def test_UpdateOne(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_UpdateOne(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # perform the operation under test
     t.UpdateValue("nickname", "Gram", "lname", ComparisonOps.IS, "Dane")
@@ -487,8 +485,8 @@ def test_UpdateOne(buildDBFile, dirtyDB):
     assert data[6][4] == '1024-01-28'
 
 
-def test_UpdateMultiple(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_UpdateMultiple(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     # perform the operation under test
     t.UpdateValue("nickname", "Test", "lname", ComparisonOps.IS, "Doe")
@@ -534,8 +532,8 @@ def test_UpdateMultiple(buildDBFile, dirtyDB):
     assert data[6][4] == '1024-01-28'
 
 
-def test_Update_PresetFilter(buildDBFile, dirtyDB):
-    t = Table("Person", buildDBFile)
+def test_Update_PresetFilter(config, buildDBFile, dirtyDB):
+    t = Table(config["Person"], buildDBFile)
 
     t.Filter('lname', ComparisonOps.IS, 'Doe')
 
@@ -558,11 +556,11 @@ def test_Update_PresetFilter(buildDBFile, dirtyDB):
     assert data[1][4] == '1024-01-28'
 
 
-def test_Update_BadUpdateColumn(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Update_BadUpdateColumn(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     # try to update a non-existant column
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         # perform the operation under test
         t.UpdateValue("nick", "Test", "lname", ComparisonOps.IS, "Doe")
 
@@ -583,11 +581,11 @@ def test_Update_BadUpdateColumn(buildDBFile):
     assert data[1][4] == "1024-01-28"
 
 
-def test_Update_BadUpdateValue(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Update_BadUpdateValue(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     # try to update a non-existant column
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         # perform the operation under test
         t.UpdateValue("nickname", 10, "lname", ComparisonOps.IS, "Doe")
 
@@ -608,11 +606,11 @@ def test_Update_BadUpdateValue(buildDBFile):
     assert data[1][4] == "1024-01-28"
 
 
-def test_Update_BadFilterColumn(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Update_BadFilterColumn(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     # try to update a non-existant column
-    with pytest.raises(src.Errors.ImaginaryColumn):
+    with pytest.raises(Errors.ImaginaryColumn):
         # perform the operation under test
         t.UpdateValue("nickname", "Test", "lame", ComparisonOps.IS, "Doe")
 
@@ -657,11 +655,11 @@ def test_Update_BadFilterColumn(buildDBFile):
     assert data[6][4] == '1024-01-28'
 
 
-def test_Update_BadFilterValue(buildDBFile):
-    t = Table("Person", buildDBFile)
+def test_Update_BadFilterValue(config, buildDBFile):
+    t = Table(config["Person"], buildDBFile)
 
     # try to update a non-existant column
-    with pytest.raises(src.Errors.InvalidColumnValue):
+    with pytest.raises(Errors.InvalidColumnValue):
         # perform the operation under test
         t.UpdateValue("nickname", "Test", "lname", ComparisonOps.IS, 10)
 
@@ -709,9 +707,9 @@ def test_Update_BadFilterValue(buildDBFile):
 
 # region SQL Tests
 
-def test_BuildSQL(buildDBFile):
+def test_BuildSQL(config, buildDBFile):
 
-    t = Table("Person", buildDBFile)
+    t = Table(config["Person"], buildDBFile)
 
     tsql = t.Build_SQL()
     actual = "Create Table Person (id integer primary key, fname text not null, lname text not null, nickname text, birthday text);"

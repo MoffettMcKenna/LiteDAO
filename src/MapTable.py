@@ -1,4 +1,4 @@
-from src.Tables import Table
+from Tables import Table
 
 class MapTable(Table):
     """
