@@ -1,7 +1,81 @@
 import re
 import typing
 import fnmatch
+from enum import IntEnum
 from sqlparse import tokens as Token
+
+
+class StorageTypes(IntEnum):
+    NULL = 0  # this value because it amuses me
+    INTEGER = 1
+    TEXT = 2
+    REAL = 3
+    BLOB = 4
+    # Types in SQLite3: https://www.sqlite.org/datatype3.html
+    # Flexible typing is a feature of SQLite, not a bug.
+    # Update: As of version 3.37.0 (2021-11-27), SQLite provides STRICT tables that do rigid type enforcement,
+    # for developers who prefer that kind of thing.
+    #       TODO add support for strict tables?
+    # SQLite recognizes the keywords "TRUE" and "FALSE", as of version 3.23.0 (2018-04-02) but those keywords
+    # are really just alternative spellings for the integer literals 1 and 0 respectively.
+    #
+    #       TODO support for dates as special cases of the storage types - text-date, real-data, int-date?
+    # SQLite does not have a storage class set aside for storing dates and/or times. Instead, the built-in Date
+    # And Time Functions of SQLite are capable of storing dates and times as TEXT, REAL, or INTEGER values:
+    #   * TEXT as ISO8601 strings ("YYYY-MM-DD HH:MM:SS.SSS").
+    #   * REAL as Julian day numbers, the number of days since noon in Greenwich on November 24, 4714 B.C.
+    #     according to the proleptic Gregorian calendar.
+    #   * INTEGER as Unix Time, the number of seconds since 1970-01-01 00:00:00 UTC.
+    # Storage Types => null, integer, real, text, blob
+    # For tables not declared as STRICT, the affinity of a column is determined by the declared type of the
+    # column, according to the following rules in the order shown:
+    #   1) If the declared type contains the string "INT" then it is assigned INTEGER affinity.
+    #   2) If the declared type of the column contains any of the strings "CHAR", "CLOB", or "TEXT" then that
+    #      column has TEXT affinity. Notice that the type VARCHAR contains the string "CHAR" and is thus
+    #      assigned TEXT affinity.
+    #   3) If the declared type for a column contains the string "BLOB" or if no type is specified then the
+    #      column has affinity BLOB.
+    #   4) If the declared type for a column contains any of the strings "REAL", "FLOA", or "DOUB" then the
+    #      column has REAL affinity.
+    #   5) Otherwise, the affinity is NUMERIC.
+    # Note that the order of the rules for determining column affinity is important. A column whose declared
+    # type is "CHARINT" will match both rules 1 and 2 but the first rule takes precedence and so the column
+    # affinity will be INTEGER.
+    #   INTEGER
+    #       INT
+    #       INTEGER
+    #       TINYINT
+    #       SMALLINT
+    #       MEDIUMINT
+    #       BIGINT
+    #       UNSIGNED BIG INT
+    #       INT2
+    #       INT8
+    #   TEXT
+    #       CHARACTER(X)
+    #       VARCHAR(X)
+    #       VARYING
+    #       CHARACTER(X)
+    #       NCHAR(X)
+    #       NATIVE
+    #       CHARACTER(X)
+    #       NVARCHAR(X)
+    #       TEXT
+    #       CLOB
+    #   BLOB
+    #       BLOB
+    #   REAL
+    #       REAL
+    #       DOUBLE
+    #       DOUBLE PRECISION
+    #       FLOAT
+    # NUMERIC
+    #       NUMERIC
+    #       DECIMAL(X,Y)
+    #       BOOLEAN
+    #       DATE
+    #       DATETIME
+    #       STRING (not really, it's just how the rules work)
 
 
 # TODO add support for unique/check/collate/generated constraints
@@ -19,7 +93,7 @@ class Column:
 
     @property
     def ColumnType(self):
-        return self._ct
+        return self._rawType
 
     @property
     def Default(self):
@@ -60,17 +134,60 @@ class Column:
         Convert a string from the ini file with the column description into a column object.
         """
         self._name = name
+        vdator = ''
 
-        # pull off the validation function
+        # find the parans enclosing the validator
         oparan = props.find('(')
-        cparan = props.find(')', oparan)
 
         self._valid = True
 
+        # exclude the validator and leave it hanging
         if oparan > 0:
             parts = props[:oparan].split(',')
-
+            cparan = props.find(')', oparan)
             vdator = props[oparan:cparan]
+        else:
+            parts = props.split(',')
+
+        # object field defaults
+        self._rawType = parts[0].strip()  # column type will always be there
+        self._null = True
+        self._solo = False
+        self._ispk = False
+        self._fk = None
+        self._default = None
+
+        # match the column type to storage type
+        if self._rawType.lower().find('int') >= 0:
+            # SQLITE Rule1: If the declared type contains the string "INT" then it is assigned INTEGER affinity.
+            self._storageT = StorageTypes.INTEGER
+        elif self._rawType.lower().find('char') >= 0 \
+                or self._rawType.lower().find('clob') >= 0 \
+                or self._rawType.lower().find('text') >= 0:  # better way to do this than breaking across lines?
+            # SQLITE Rule2: If the declared type of the column contains any of the strings "CHAR", "CLOB", or "TEXT"
+            # then that column has TEXT affinity. Notice that the type VARCHAR contains the string "CHAR" and is thus
+            # assigned TEXT affinity.
+            self._storageT = StorageTypes.TEXT
+            pass
+        elif len(self._rawType) == 0 or self._rawType.lower().find("blob") >= 0:
+            # SQLITE Rule3: If the declared type for a column contains the string "BLOB" or if no type is specified
+            # then the column has affinity BLOB.
+            self._storageT = StorageTypes.BLOB
+        elif self._rawType.lower().find('real') >= 0 \
+                or self._rawType.lower().find('floa') >= 0\
+                or self._rawType.lower().find('doub') >= 0:
+            # SQLITE Rule4: If the declared type for a column contains any of the strings "REAL", "FLOA", or "DOUB"
+            # then the column has REAL affinity.
+            self._storageT = StorageTypes.REAL
+        else:
+            # SQLITE Rule5: Otherwise, the affinity is NUMERIC.
+            # This is a weird position - NUMERIC isn't actually a storage type, but rather is an internal mechanism for
+            # the engine to manage more mixed scenarios.  TEXT provides the most flexibility, so it will be the type
+            # used to simulate that.
+            self._storageT = StorageTypes.TEXT
+
+        # assign the validator
+        if len(vdator) > 0:
             tech, func = vdator.split(':')
             if tech.strip(' ').lower() == 'regex':
                 self._validator = lambda x: re.search(func.strip(), x) != None
@@ -78,24 +195,20 @@ class Column:
                 func[0] = 'x'
                 self._validator = lambda x: func.strip(' ')
         else:
-            parts = props.split(',')
-            # TODO convert to new match and correct for actually allowed column types, not just underlying datatypes
-            vdators = {
-                'integer': (lambda val: isinstance(val, int) or val == None),
-                'real': (lambda val: isinstance(val, float) or val == None),
-                'text': (lambda val: isinstance(val, str) or val == None),
-                'null': (lambda val: val is None),
-                'blob': (lambda val: True)  # just let it ride
-            }
-            self._validator = vdators[parts[0].strip()]
-
-        # object field defaults
-        self._ct = parts[0].strip()  # column type will always be there
-        self._null = True
-        self._solo = False
-        self._ispk = False
-        self._fk = None
-        self._default = None
+            # default validators for the storage types
+            match self._storageT:
+                case StorageTypes.INTEGER:
+                    self._validator = lambda val: isinstance(val, int) or val is None
+                case StorageTypes.NULL:
+                    self._validator = lambda val: val is None
+                case StorageTypes.REAL:
+                    self._validator = lambda val: isinstance(val, float) or val is None
+                case StorageTypes.TEXT:
+                    self._validator = lambda val: isinstance(val, str) or val is None
+                case StorageTypes.BLOB:
+                    self._validator = lambda val: True  # just let it ride
+                case _:
+                    self._validator = lambda val: True  # just let it ride
 
         propmap = {
             'required': 'not null',
@@ -137,14 +250,14 @@ class Column:
                     pp = p.strip().split(' ')
                     if len(pp) == 2:
                         # need to change the type based on the column type
-                        match self._ct:
-                            case 'integer':
+                        match self._storageT:
+                            case StorageTypes.INTEGER:
                                 self._default = int(pp[1])
-                            case 'real':
+                            case StorageTypes.REAL:
                                 self._default = float(pp[1])
-                            case 'text':
+                            case StorageTypes.TEXT:
                                 self._default = str(pp[1])
-                            case 'blob':
+                            case StorageTypes.BLOB:
                                 self._default = bytes(pp[1])
                         # end match
                     else:
@@ -170,14 +283,14 @@ class Column:
 
         if self._default is None:
             self._sql_default = False
-            match self._ct:
-                case 'integer':
+            match self._storageT:
+                case StorageTypes.INTEGER:
                     self._default = 0
-                case 'real':
+                case StorageTypes.REAL:
                     self._default = 0.0
-                case 'text':
+                case StorageTypes.TEXT:
                     self._default = ''
-                case 'blob':
+                case StorageTypes.BLOB:
                     self._default = b''
             # end match _ct
         else:
@@ -250,7 +363,7 @@ class Column:
     def _isDefaultDefault(self) -> bool:
         """
         Tests for a default value other than the sqlite standard.  If the default is the standard, no default
-        clause is needed on the
+        clause is needed on the sql statement.
         :return:
         """
         # TODO figure out how to set this up as a CLASS variable
@@ -263,8 +376,6 @@ class Column:
         }
         return self.Default == defaults[self.ColumnType]
 
-    # end Build_SQL
-
     def make_sql(self, wname: bool = False) -> str:
         """
         Generates the part of the sql statement which creates this particular column.
@@ -273,9 +384,9 @@ class Column:
 
         # add or don't the column name based on params
         if wname:
-            sql = f"{self.name} {self.ctype}"
+            sql = f"{self.name} {self._rawType}"
         else:
-            sql = f"{self.ctype}"
+            sql = f"{self._rawType}"
 
         if not self.nullable and not self.pkey:
             sql = f"{sql} not null"
