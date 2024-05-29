@@ -3,10 +3,6 @@ import os
 from Tables import *
 from sqlparse import engine, tokens as Token
 
-"""
-
-"""
-
 
 class Database:
     """
@@ -65,6 +61,8 @@ class Database:
                 # empty db, need to create the table
                 Table.Create()
         # end for table in config.sections
+
+        # are there any tables in the db which aren't in the file?  backup before delete?
     # end __init__()
 
     def _parse_create(self, sql: str):
@@ -154,8 +152,6 @@ class Database:
         return tname, tdata
     # end parse_create()
 
-
-
     def _validateTable(self, name: str, table: Table, config: configparser.Section) -> tuple(bool, list):
         """
         Compare the SQL create statement generated from the ini file with the one from
@@ -227,7 +223,7 @@ class Database:
         for p in plist:
             # these are the values which need some translation
             keys = {
-                'key' : 'Primary Key',
+                'key': 'Primary Key',
                 'required': 'Not Null',
             }
 
